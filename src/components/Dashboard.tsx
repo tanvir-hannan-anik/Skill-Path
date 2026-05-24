@@ -1,15 +1,17 @@
-import { lazy, Suspense, useState } from 'react';
-import { Menu, X, Layers } from 'lucide-react';
+import { lazy, Suspense, useState, type ReactNode } from 'react';
+import { Menu, X, Layers, Compass, Map, CheckSquare, Calendar as CalendarIcon, Lightbulb, User } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { NavItem, DayContent, WORKSPACE_COLORS, genWorkspaceId } from '../types';
 import { Sidebar } from './Sidebar';
 import { LearnContentView } from './LearnContentView';
 import { TasksPage } from './TasksPage';
+import { ProfilePage } from './ProfilePage';
 import { FullPageLoader } from './ui/FullPageLoader';
 import { useAuth } from '../lib/AuthContext';
 import { useToast } from '../lib/toast';
 import { useSchedule } from '../hooks/useSchedule';
 import { useWorkspaces } from '../hooks/useWorkspaces';
+import { useStreak } from '../hooks/useStreak';
 import { toDateKey } from '../lib/dates';
 
 const InsightsPage = lazy(() => import('./InsightsPage').then(m => ({ default: m.InsightsPage })));
@@ -44,25 +46,30 @@ export function Dashboard({ onRequestAuth }: Props) {
     user?.uid ?? null,
     activeWorkspaceId || null,
   );
+  const streak = useStreak(schedule);
 
   // Only block the full UI on workspace loading; schedule loading renders inline skeletons.
   const loading = wsLoading;
 
   const handleUpdateDay = (date: string, day: DayContent) => updateDay(date, day);
 
-  const handleNav = async (tab: NavItem) => {
+  const handleNav = (tab: NavItem) => {
     setMobileSidebarOpen(false);
     if (tab === 'profile') {
       if (!user) { onRequestAuth(); return; }
-      try {
-        await logout();
-        toast.info('You have been signed out.');
-      } catch {
-        toast.error('Sign out failed.');
-      }
+      setActiveTab('profile');
       return;
     }
     setActiveTab(tab);
+  };
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      toast.info('You have been signed out.');
+    } catch {
+      toast.error('Sign out failed.');
+    }
   };
 
   const handleSwitchWorkspace = async (wsId: string) => {
@@ -83,13 +90,14 @@ export function Dashboard({ onRequestAuth }: Props) {
     onRenameWorkspace: (wsId: string, name: string) => updateWorkspace(wsId, { name }),
     selectedDate,
     onDateSelect: (d: string) => { setSelectedDate(d); setActiveTab('learn'); },
+    streak,
   };
 
   if (loading) return <FullPageLoader label="Loading your workspace…" />;
 
   return (
     <div className="flex h-[100dvh] bg-canvas p-2 sm:p-3 md:p-4 gap-3 md:gap-4 overflow-hidden relative">
-      {/* Mobile hamburger */}
+      {/* Mobile hamburger — only shown to open drawer for workspace/date controls */}
       <button
         onClick={() => setMobileSidebarOpen(true)}
         className="md:hidden fixed top-4 left-4 z-30 w-11 h-11 rounded-full bg-white border border-border-strong shadow-md flex items-center justify-center text-primary"
@@ -97,6 +105,15 @@ export function Dashboard({ onRequestAuth }: Props) {
       >
         <Menu className="w-5 h-5" />
       </button>
+
+      {/* Mobile bottom navigation bar */}
+      <MobileBottomNav
+        activeTab={activeTab}
+        onChangeTab={handleNav}
+        streak={streak}
+        userPhotoURL={user?.photoURL ?? null}
+        displayName={user?.displayName || user?.email?.split('@')[0] || null}
+      />
 
       {/* Desktop sidebar */}
       <div className="hidden md:flex">
@@ -139,7 +156,7 @@ export function Dashboard({ onRequestAuth }: Props) {
 
       {/* Main content */}
       <main className="flex-1 bg-surface rounded-[24px] md:rounded-[32px] overflow-hidden shadow-[0_8px_40px_rgb(0,0,0,0.03)] border border-border-strong relative flex flex-col">
-        <div className="flex-1 overflow-y-auto px-4 sm:px-8 lg:px-16 pt-16 md:pt-6 pb-4 sm:py-6 flex flex-col min-h-0">
+        <div className="flex-1 overflow-y-auto px-4 sm:px-8 lg:px-16 pt-16 sm:pt-6 pb-24 sm:pb-6 flex flex-col min-h-0">
           <AnimatePresence mode="wait">
             <motion.div
               key={`${activeTab}-${activeWorkspaceId}`}
@@ -211,10 +228,99 @@ export function Dashboard({ onRequestAuth }: Props) {
                   <InsightsPage skill={activeWorkspace?.name ?? ''} schedule={schedule} />
                 </Suspense>
               )}
+
+              {activeTab === 'profile' && (
+                <ProfilePage
+                  schedule={schedule}
+                  onRequestAuth={onRequestAuth}
+                  onLogout={handleLogout}
+                />
+              )}
             </motion.div>
           </AnimatePresence>
         </div>
       </main>
+    </div>
+  );
+}
+
+// ---- Mobile bottom navigation bar -------------------------------------------
+
+interface MobileNavProps {
+  activeTab: NavItem;
+  onChangeTab: (tab: NavItem) => void;
+  streak: number;
+  userPhotoURL: string | null;
+  displayName: string | null;
+}
+
+const MOBILE_NAV: { id: NavItem; icon: ReactNode; label: string }[] = [
+  { id: 'learn', icon: <Compass className="w-5 h-5" />, label: 'Learn' },
+  { id: 'tasks', icon: <CheckSquare className="w-5 h-5" />, label: 'Tasks' },
+  { id: 'plan', icon: <Map className="w-5 h-5" />, label: 'Plan' },
+  { id: 'calendar', icon: <CalendarIcon className="w-5 h-5" />, label: 'Calendar' },
+  { id: 'insights', icon: <Lightbulb className="w-5 h-5" />, label: 'Insights' },
+];
+
+function MobileBottomNav({ activeTab, onChangeTab, streak, userPhotoURL, displayName }: MobileNavProps) {
+  return (
+    <div className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-surface/95 backdrop-blur-md border-t border-border-strong safe-bottom">
+      <div className="flex items-center justify-around px-2 py-2">
+        {MOBILE_NAV.map((item) => {
+          const isActive = activeTab === item.id;
+          return (
+            <button
+              key={item.id}
+              onClick={() => onChangeTab(item.id)}
+              className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-colors min-w-0 ${
+                isActive ? 'text-primary' : 'text-text-muted'
+              }`}
+            >
+              <div className={`relative ${isActive ? 'text-primary' : 'text-text-muted'}`}>
+                {item.icon}
+                {isActive && (
+                  <motion.div
+                    layoutId="mobileNavDot"
+                    className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-primary"
+                  />
+                )}
+              </div>
+              <span className="text-[10px] font-medium">{item.label}</span>
+            </button>
+          );
+        })}
+        {/* Profile button */}
+        <button
+          onClick={() => onChangeTab('profile')}
+          className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-colors min-w-0 ${
+            activeTab === 'profile' ? 'text-primary' : 'text-text-muted'
+          }`}
+        >
+          <div className="relative">
+            {userPhotoURL ? (
+              <img src={userPhotoURL} alt="" referrerPolicy="no-referrer" crossOrigin="anonymous" className="w-5 h-5 rounded-full object-cover ring-1 ring-border-strong" />
+            ) : displayName ? (
+              <div className="w-5 h-5 rounded-full bg-primary text-white flex items-center justify-center text-[10px] font-bold">
+                {displayName.slice(0, 1).toUpperCase()}
+              </div>
+            ) : (
+              <User className="w-5 h-5" />
+            )}
+            {streak > 0 && (
+              <div className="absolute -top-1.5 -right-2 bg-orange-500 text-white text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center leading-none">
+                {streak > 99 ? '99+' : streak}
+              </div>
+            )}
+            {activeTab === 'profile' && (
+              <motion.div
+                layoutId="mobileNavDot"
+                className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-primary"
+              />
+            )}
+          </div>
+          <span className="text-[10px] font-medium">Profile</span>
+        </button>
+      </div>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { Home, Compass, CheckSquare, Calendar as CalendarIcon, Lightbulb, LogOut, LogIn, Map } from 'lucide-react';
+import { Home, Compass, CheckSquare, Calendar as CalendarIcon, Lightbulb, LogIn, Map, Flame } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
 import { WorkspaceSwitcher } from './WorkspaceSwitcher';
 import { ReactNode, useMemo } from 'react';
@@ -18,6 +18,7 @@ interface Props {
   onRenameWorkspace: (wsId: string, name: string) => void;
   selectedDate: string;
   onDateSelect: (date: string) => void;
+  streak?: number;
 }
 
 const NAV_ITEMS: { id: NavItem; label: string; icon: ReactNode }[] = [
@@ -40,10 +41,12 @@ export function Sidebar({
   onRenameWorkspace,
   selectedDate,
   onDateSelect,
+  streak = 0,
 }: Props) {
   const { user } = useAuth();
   const dates = useMemo(() => rollingFiveDays(), []);
   const displayName = user?.displayName || user?.email?.split('@')[0] || 'Learner';
+  const photoURL = user?.photoURL;
 
   return (
     <div className="w-[280px] min-w-[280px] h-full flex flex-col pt-6 pb-4">
@@ -129,16 +132,37 @@ export function Sidebar({
         {user ? (
           <button
             onClick={() => onChangeTab('profile')}
-            className="w-full flex items-center justify-between px-4 py-3 rounded-[16px] text-sm font-medium bg-white border border-border-strong text-text-secondary hover:text-primary transition-colors shadow-sm"
-            title="Sign out"
+            className={`w-full flex items-center justify-between px-4 py-3 rounded-[16px] text-sm font-medium border text-text-secondary hover:text-primary transition-colors shadow-sm ${
+              activeTab === 'profile'
+                ? 'bg-primary/5 border-primary/20 text-primary'
+                : 'bg-white border-border-strong'
+            }`}
+            title="Profile & Achievements"
           >
             <div className="flex items-center gap-3 min-w-0">
-              <div className="w-7 h-7 rounded-full bg-primary text-white flex items-center justify-center text-xs font-semibold shrink-0">
-                {displayName.slice(0, 1).toUpperCase()}
-              </div>
+              {/* Avatar */}
+              {photoURL ? (
+                <img
+                  src={photoURL}
+                  alt={displayName}
+                  referrerPolicy="no-referrer"
+                  crossOrigin="anonymous"
+                  className="w-7 h-7 rounded-full object-cover shrink-0 ring-2 ring-border-strong"
+                />
+              ) : (
+                <div className="w-7 h-7 rounded-full bg-primary text-white flex items-center justify-center text-xs font-semibold shrink-0">
+                  {displayName.slice(0, 1).toUpperCase()}
+                </div>
+              )}
               <span className="truncate">{displayName}</span>
             </div>
-            <LogOut className="w-4 h-4 shrink-0" />
+            {/* Streak badge */}
+            {streak > 0 && (
+              <div className="flex items-center gap-1 shrink-0 bg-orange-100 text-orange-600 rounded-full px-2 py-0.5 text-xs font-bold border border-orange-200">
+                <Flame className="w-3 h-3" />
+                {streak}
+              </div>
+            )}
           </button>
         ) : (
           <button

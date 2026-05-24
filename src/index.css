@@ -76,6 +76,19 @@
 
 body {
   @apply bg-canvas text-text-main font-sans antialiased selection:bg-accent selection:text-white;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* iOS safe-area bottom padding for fixed bottom nav */
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Mobile touch improvements */
+@media (max-width: 768px) {
+  button, a {
+    touch-action: manipulation;
+  }
 }
 
 ::-webkit-scrollbar { width: 0px; height: 0px; background: transparent; }

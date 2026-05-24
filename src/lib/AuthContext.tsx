@@ -21,6 +21,7 @@ interface AuthContextValue {
   signInWithGoogle: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
   logout: () => Promise<void>;
+  updateDisplayName: (name: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -61,6 +62,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
     logout: async () => {
       await signOut(auth);
+    },
+    updateDisplayName: async (name: string) => {
+      if (auth.currentUser) {
+        await updateProfile(auth.currentUser, { displayName: name.trim() });
+      }
     },
   }), [user, loading]);
 

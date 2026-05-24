@@ -48,6 +48,7 @@ export function VideoPortionScheduler({
   const [newStart, setNewStart] = useState('0:00');
   const [newEnd, setNewEnd] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [quickSplitMax, setQuickSplitMax] = useState(7);
 
   const totalSec = plan?.totalSec ?? totalSecHint ?? 0;
 
@@ -196,18 +197,28 @@ export function VideoPortionScheduler({
 
       {/* Quick split */}
       {totalSec > 0 && sessions.length === 0 && (
-        <div className="flex flex-wrap items-center gap-2 mb-5 p-3 bg-white border border-border-strong rounded-xl">
-          <span className="text-xs font-bold uppercase tracking-widest text-text-muted mr-2">Quick split</span>
-          {[2, 3, 4].map((n) => (
+        <div className="mb-5 p-3 bg-white border border-border-strong rounded-xl">
+          <div className="text-xs font-bold uppercase tracking-widest text-text-muted mb-2.5">Quick split</div>
+          <div className="flex flex-wrap gap-2 items-center">
+            {Array.from({ length: quickSplitMax }, (_, i) => i + 1).map((n) => (
+              <button
+                key={n}
+                type="button"
+                onClick={() => handleQuickSplit(n)}
+                className="px-3 py-1.5 text-xs font-medium bg-canvas border border-border-strong text-text-secondary hover:text-primary hover:border-primary/30 hover:bg-primary/5 rounded-lg transition-colors tabular-nums"
+              >
+                {n} {n === 1 ? 'day' : 'days'}
+              </button>
+            ))}
             <button
-              key={n}
               type="button"
-              onClick={() => handleQuickSplit(n)}
-              className="px-3 py-1.5 text-xs font-medium bg-canvas border border-border-strong text-text-secondary hover:text-primary hover:border-primary/30 rounded-lg transition-colors"
+              onClick={() => setQuickSplitMax((m) => m + 1)}
+              title="Add one more day option"
+              className="w-8 h-8 flex items-center justify-center rounded-lg border border-dashed border-border-strong text-text-muted hover:text-primary hover:border-primary/40 hover:bg-primary/5 transition-colors"
             >
-              Across {n} days
+              <Plus className="w-4 h-4" />
             </button>
-          ))}
+          </div>
         </div>
       )}
 
