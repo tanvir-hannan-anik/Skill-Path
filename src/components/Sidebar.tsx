@@ -1,4 +1,4 @@
-import { Home, Compass, CheckSquare, Calendar as CalendarIcon, Lightbulb, Hexagon, LogOut, LogIn, Map } from 'lucide-react';
+import { Home, Compass, CheckSquare, Calendar as CalendarIcon, Lightbulb, LogOut, LogIn, Map } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
 import { WorkspaceSwitcher } from './WorkspaceSwitcher';
 import { ReactNode, useMemo } from 'react';
@@ -49,9 +49,7 @@ export function Sidebar({
     <div className="w-[280px] min-w-[280px] h-full flex flex-col pt-6 pb-4">
       {/* Logo */}
       <div className="px-6 flex items-center gap-3 mb-6">
-        <div className="w-10 h-10 rounded-[12px] bg-primary flex items-center justify-center shadow-lg shadow-black/10">
-          <Hexagon className="w-6 h-6 text-white fill-white/20" />
-        </div>
+        <img src="/LOGO.png" alt="SkillPath" className="w-10 h-10 rounded-[12px] object-contain shadow-lg shadow-black/10" />
         <span className="font-display font-semibold text-2xl tracking-tight text-primary">SkillPath</span>
       </div>
 
