@@ -1,0 +1,6 @@
+{
+  "name": "SkillPath",
+  "description": "A dark-editorial learning platform that generates daily tasks and insights from user-provided free resources.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

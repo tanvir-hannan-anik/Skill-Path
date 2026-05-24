@@ -1,0 +1,84 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@300;400;500;600;700&display=swap');
+@import "tailwindcss";
+
+/* Class-based dark mode for Tailwind v4. */
+@variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Outfit", ui-sans-serif, system-ui, sans-serif;
+
+  --color-canvas: #f4f4f5;        /* page background */
+  --color-surface: #ffffff;       /* card / panel */
+  --color-primary: #09090b;       /* body text + brand */
+  --color-accent: #3b82f6;
+
+  --color-text-main: #09090b;
+  --color-text-secondary: #52525b;
+  --color-text-muted: #a1a1aa;
+
+  --color-border-subtle: #f4f4f5;
+  --color-border-strong: #e4e4e7;
+}
+
+/*
+ * Dark theme.
+ *
+ * `--color-primary` is dual-purpose: it's both the body text color (via
+ * `text-primary`) AND the brand surface color (via `bg-primary`). In dark
+ * mode we flip it to a light value so text reads — and then re-pin
+ * `bg-primary` to a distinct dark surface below so branded blocks
+ * (Tasks hero, primary buttons) keep their dark identity.
+ */
+.dark {
+  --color-canvas: #09090b;
+  --color-surface: #18181b;
+  --color-primary: #fafafa;
+  --color-accent: #60a5fa;
+
+  --color-text-main: #fafafa;
+  --color-text-secondary: #a1a1aa;
+  --color-text-muted: #71717a;
+
+  --color-border-subtle: #27272a;
+  --color-border-strong: #2a2a2e;
+}
+
+/* Branded surfaces stay dark in dark mode so `bg-primary text-white` keeps reading. */
+.dark .bg-primary { background-color: #0f0f10; }
+.dark .hover\:bg-primary\/90:hover { background-color: #1a1a1d; }
+.dark .bg-primary\/10 { background-color: rgb(15 15 16 / 0.4); }
+.dark .bg-primary\/5 { background-color: rgb(15 15 16 / 0.3); }
+.dark .border-primary { border-color: #3f3f46; }
+
+/* `bg-white` panels track the surface token in dark mode. */
+.dark .bg-white { background-color: var(--color-surface); }
+.dark .bg-white\/50 { background-color: color-mix(in srgb, var(--color-surface) 50%, transparent); }
+.dark .bg-white\/60 { background-color: color-mix(in srgb, var(--color-surface) 60%, transparent); }
+.dark .bg-white\/80 { background-color: color-mix(in srgb, var(--color-surface) 80%, transparent); }
+
+/* A few utility classes used inline that need dark equivalents. */
+.dark .shadow-inner { box-shadow: inset 0 2px 4px 0 rgb(0 0 0 / 0.3); }
+.dark .bg-slate-100 { background-color: #27272a; }
+.dark .bg-amber-50 { background-color: rgb(120 53 15 / 0.2); }
+.dark .border-amber-200 { border-color: rgb(120 53 15 / 0.5); }
+.dark .text-amber-900 { color: #fcd34d; }
+.dark .bg-red-50 { background-color: rgb(127 29 29 / 0.25); }
+.dark .border-red-200 { border-color: rgb(127 29 29 / 0.5); }
+.dark .text-red-700 { color: #fca5a5; }
+.dark .text-red-600 { color: #fca5a5; }
+.dark .hover\:bg-red-50:hover { background-color: rgb(127 29 29 / 0.25); }
+.dark .bg-emerald-50 { background-color: rgb(6 78 59 / 0.25); }
+.dark .border-emerald-200 { border-color: rgb(6 78 59 / 0.55); }
+.dark .text-emerald-800 { color: #6ee7b7; }
+.dark .text-emerald-900 { color: #6ee7b7; }
+.dark .bg-emerald-50\/40 { background-color: rgb(6 78 59 / 0.18); }
+
+body {
+  @apply bg-canvas text-text-main font-sans antialiased selection:bg-accent selection:text-white;
+}
+
+::-webkit-scrollbar { width: 0px; height: 0px; background: transparent; }
+
+html { color-scheme: light; }
+html.dark { color-scheme: dark; }
