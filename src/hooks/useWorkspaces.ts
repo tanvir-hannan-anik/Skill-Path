@@ -212,18 +212,12 @@ export function useWorkspaces(uid: string | null) {
         setGuestActiveWorkspaceId(ws.id);
         setGuestSkill(ws.name);
       } else {
-        try {
-          await saveWorkspace(uid, ws);
-          await fsSetActiveWsId(uid, ws.id);
-        } catch (err) {
-          console.error('createWorkspace Firestore write failed — trying Supabase', err);
-          try {
-            await sbSaveWorkspace(uid, ws);
-            await sbSetActiveWsId(uid, ws.id);
-          } catch (sbErr) {
-            console.error('createWorkspace Supabase fallback failed', sbErr);
-            toast.error('Could not save workspace to cloud. It is available locally this session.');
-          }
+        const results = await Promise.allSettled([
+          saveWorkspace(uid, ws).then(() => fsSetActiveWsId(uid, ws.id)),
+          sbSaveWorkspace(uid, ws).then(() => sbSetActiveWsId(uid, ws.id)),
+        ]);
+        if (results.every((r) => r.status === 'rejected')) {
+          toast.error('Could not save workspace to cloud. It is available locally this session.');
         }
       }
       return ws.id;
@@ -239,15 +233,10 @@ export function useWorkspaces(uid: string | null) {
         const ws = workspaces.find((w) => w.id === wsId);
         if (ws) setGuestSkill(ws.name);
       } else {
-        try {
-          await fsSetActiveWsId(uid, wsId);
-        } catch {
-          try {
-            await sbSetActiveWsId(uid, wsId);
-          } catch (sbErr) {
-            console.error('switchWorkspace failed', sbErr);
-          }
-        }
+        await Promise.allSettled([
+          fsSetActiveWsId(uid, wsId),
+          sbSetActiveWsId(uid, wsId),
+        ]);
       }
     },
     [uid, workspaces],
@@ -277,23 +266,13 @@ export function useWorkspaces(uid: string | null) {
           const newId = remaining[0]?.id ?? '';
           setActiveWsIdState(newId);
         }
-        try {
-          await deleteWorkspaceAndData(uid, wsId);
-          if (activeWorkspaceId === wsId) {
-            const newId = remaining[0]?.id ?? '';
-            await fsSetActiveWsId(uid, newId);
-          }
-        } catch {
-          try {
-            await sbDeleteWorkspace(uid, wsId);
-            if (activeWorkspaceId === wsId) {
-              const newId = remaining[0]?.id ?? '';
-              await sbSetActiveWsId(uid, newId);
-            }
-          } catch (sbErr) {
-            console.error('deleteWorkspace failed', sbErr);
-            toast.error('Could not delete workspace from cloud.');
-          }
+        const newId = activeWorkspaceId === wsId ? remaining[0]?.id ?? '' : activeWorkspaceId;
+        const results = await Promise.allSettled([
+          deleteWorkspaceAndData(uid, wsId).then(() => fsSetActiveWsId(uid, newId)),
+          sbDeleteWorkspace(uid, wsId).then(() => sbSetActiveWsId(uid, newId)),
+        ]);
+        if (results.every((r) => r.status === 'rejected')) {
+          toast.error('Could not delete workspace from cloud.');
         }
       }
     },
@@ -310,15 +289,12 @@ export function useWorkspaces(uid: string | null) {
       } else {
         const ws = workspaces.find((w) => w.id === wsId);
         if (!ws) return;
-        try {
-          await saveWorkspace(uid, { ...ws, ...patch });
-        } catch {
-          try {
-            await sbSaveWorkspace(uid, { ...ws, ...patch });
-          } catch (sbErr) {
-            console.error('updateWorkspace failed', sbErr);
-            toast.error('Could not update workspace.');
-          }
+        const results = await Promise.allSettled([
+          saveWorkspace(uid, { ...ws, ...patch }),
+          sbSaveWorkspace(uid, { ...ws, ...patch }),
+        ]);
+        if (results.every((r) => r.status === 'rejected')) {
+          toast.error('Could not update workspace.');
         }
       }
     },
