@@ -75,9 +75,31 @@ export function useWorkspaces(uid: string | null) {
       async (wss) => {
         if (cancelled) return;
 
-        // Auto-create first workspace from legacy profile if none exist
+        // Firestore returned empty — check Supabase before auto-creating
         if (wss.length === 0 && !initializedRef.current) {
           initializedRef.current = true;
+
+          // Check Supabase first — workspace may have been saved there
+          try {
+            const sbWss = await sbGetWorkspaces(uid);
+            if (sbWss.length > 0 && !cancelled) {
+              const sorted = [...sbWss].sort((a, b) => a.createdAt - b.createdAt);
+              const activeId = await sbGetActiveWsId(uid);
+              setWorkspaces(sorted);
+              const validId =
+                activeId && sorted.some((w) => w.id === activeId)
+                  ? activeId
+                  : sorted[0]?.id ?? '';
+              setActiveWsIdState(validId);
+              activeIdResolvedRef.current = true;
+              setLoading(false);
+              return;
+            }
+          } catch (sbErr) {
+            console.error('Supabase workspace check failed', sbErr);
+          }
+
+          // Nothing in Supabase either — auto-create from profile
           try {
             const profile = await getProfile(uid);
             const name = profile?.skill?.trim() || 'My Workspace';
@@ -89,15 +111,20 @@ export function useWorkspaces(uid: string | null) {
               createdAt: Date.now(),
               color: WORKSPACE_COLORS[0],
             };
-            await saveWorkspace(uid, ws);
-            await migrateLegacySchedule(uid, ws.id);
-            await fsSetActiveWsId(uid, ws.id);
+            try {
+              await saveWorkspace(uid, ws);
+              await migrateLegacySchedule(uid, ws.id);
+              await fsSetActiveWsId(uid, ws.id);
+            } catch {
+              await sbSaveWorkspace(uid, ws);
+              await sbSetActiveWsId(uid, ws.id);
+            }
             if (!cancelled) {
               activeIdResolvedRef.current = true;
               setActiveWsIdState(ws.id);
             }
           } catch (err) {
-            console.error('workspace migration failed', err);
+            console.error('workspace auto-create failed', err);
           }
           return;
         }
