@@ -7,18 +7,16 @@ import type { VideoPlan, VideoSession } from '../types';
 
 interface Props {
   plan: VideoPlan | null;
-  /** Updates passed up to the parent which is responsible for persistence. */
   onChange: (plan: VideoPlan) => void;
-  /** Jump the embedded player to a specific second. */
   onSeek?: (sec: number) => void;
-  /** Latest playback position from the player, in seconds. */
   currentSec?: number;
-  /** Default total duration for new plans (e.g. from YouTube metadata). */
   totalSecHint?: number;
   videoId: string;
   url: string;
   title: string;
   source: string;
+  /** Called for each day a session is created so the video is added to that day's schedule. */
+  onScheduleVideoForDate?: (date: string, video: import('../types').Resource) => void;
 }
 
 function newSessionId() {
@@ -44,7 +42,7 @@ function parseTimestamp(input: string): number | null {
  * `currentSec` and marks sessions complete when the user reaches `endSec`.
  */
 export function VideoPortionScheduler({
-  plan, onChange, onSeek, currentSec, totalSecHint, videoId, url, title, source,
+  plan, onChange, onSeek, currentSec, totalSecHint, videoId, url, title, source, onScheduleVideoForDate,
 }: Props) {
   const [newDate, setNewDate] = useState(() => toDateKey());
   const [newStart, setNewStart] = useState('0:00');
@@ -155,6 +153,12 @@ export function VideoPortionScheduler({
     });
     const base = ensurePlan();
     onChange({ ...base, totalSec, sessions });
+
+    // Add the video resource to each day's schedule automatically
+    if (onScheduleVideoForDate) {
+      const video = { url, title, source };
+      sessions.forEach((s) => onScheduleVideoForDate(s.date, video));
+    }
   }
 
   const sessions = plan?.sessions ?? [];

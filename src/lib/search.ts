@@ -1,22 +1,14 @@
-/**
- * Deep-link providers for free learning resources.
- *
- * We cannot search W3Schools / freeCodeCamp / MDN inline because none of them
- * expose a public CORS-enabled search API. Instead we construct deep links
- * that open the search results directly in a new tab. This is honest about the
- * limitation while still saving the user a step.
- */
+// ---- Legacy provider deep-links (used in SearchPage / PlanPage) -------------
+
+const enc = (s: string) => encodeURIComponent(s.trim());
 
 export interface SearchProvider {
   key: string;
   name: string;
   description: string;
   url: (query: string) => string;
-  /** Used for a small visual badge. */
   accent: string;
 }
-
-const enc = (s: string) => encodeURIComponent(s.trim());
 
 export const SEARCH_PROVIDERS: SearchProvider[] = [
   {
@@ -48,3 +40,26 @@ export const SEARCH_PROVIDERS: SearchProvider[] = [
     url: (q) => `https://www.google.com/search?q=${enc(q + ' official documentation')}`,
   },
 ];
+
+// ---- Google Custom Search (used in InlineDocSearch) -------------------------
+
+const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_DRIVE_API_KEY as string | undefined;
+const GOOGLE_CSE_ID = import.meta.env.VITE_GOOGLE_CSE_ID as string | undefined;
+
+export const isGoogleSearchConfigured = Boolean(GOOGLE_API_KEY && GOOGLE_CSE_ID);
+
+export interface GoogleSearchResult {
+  title: string;
+  link: string;
+  displayLink: string;
+  snippet: string;
+}
+
+export async function searchGoogle(query: string): Promise<GoogleSearchResult[]> {
+  if (!isGoogleSearchConfigured) return [];
+  const url = `https://www.googleapis.com/customsearch/v1?key=${GOOGLE_API_KEY}&cx=${GOOGLE_CSE_ID}&q=${encodeURIComponent(query)}&num=8`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Google search failed: ${res.status}`);
+  const data = await res.json() as { items?: GoogleSearchResult[] };
+  return data.items ?? [];
+}

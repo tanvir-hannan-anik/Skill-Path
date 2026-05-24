@@ -11,6 +11,7 @@ interface Props {
   date: string;
   day: DayContent;
   onUpdateDay: (data: DayContent) => void;
+  onScheduleVideoForDate?: (date: string, video: Resource) => void;
 }
 
 const DIFFICULTY_COLORS = {
@@ -27,7 +28,7 @@ const PILLS: { id: ContentTypePill; label: string; icon: ReactNode }[] = [
   { id: 'assignment', label: 'Daily Task', icon: <ClipboardList className="w-[14px] h-[14px]" /> },
 ];
 
-export function LearnContentView({ date, day, onUpdateDay }: Props) {
+export function LearnContentView({ date, day, onUpdateDay, onScheduleVideoForDate }: Props) {
   const [activePill, setActivePill] = useState<ContentTypePill>('video');
   const [titleDraft, setTitleDraft] = useState(day.topicTitle ?? '');
 
@@ -138,6 +139,7 @@ export function LearnContentView({ date, day, onUpdateDay }: Props) {
             videos={day.videos}
             onAddVideo={handleAddVideo}
             onRemoveVideo={(url) => onUpdateDay({ ...day, videos: day.videos.filter(v => v.url !== url) })}
+            onScheduleVideoForDate={onScheduleVideoForDate}
           />
         )}
         {activePill === 'docs' && (

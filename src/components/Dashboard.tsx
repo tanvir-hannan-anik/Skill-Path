@@ -167,6 +167,12 @@ export function Dashboard({ onRequestAuth }: Props) {
                       date={selectedDate}
                       day={schedule[selectedDate] ?? EMPTY_DAY}
                       onUpdateDay={(d) => handleUpdateDay(selectedDate, d)}
+                      onScheduleVideoForDate={(date, video) => {
+                        const dayData = schedule[date] ?? EMPTY_DAY;
+                        if (!dayData.videos.some((v) => v.url === video.url)) {
+                          handleUpdateDay(date, { ...dayData, videos: [...dayData.videos, video] });
+                        }
+                      }}
                     />
               )}
 
