@@ -9,6 +9,13 @@ import {
   getProfile,
 } from '../lib/firestore';
 import {
+  saveWorkspace as sbSaveWorkspace,
+  deleteWorkspace as sbDeleteWorkspace,
+  getWorkspaces as sbGetWorkspaces,
+  getActiveWorkspaceId as sbGetActiveWsId,
+  setActiveWorkspaceId as sbSetActiveWsId,
+} from '../lib/supabaseDb';
+import {
   getGuestWorkspaces,
   addGuestWorkspace,
   removeGuestWorkspace,
@@ -86,14 +93,12 @@ export function useWorkspaces(uid: string | null) {
             await migrateLegacySchedule(uid, ws.id);
             await fsSetActiveWsId(uid, ws.id);
             if (!cancelled) {
-              // Pre-resolve the active ID so the next snapshot doesn't need another Firestore read
               activeIdResolvedRef.current = true;
               setActiveWsIdState(ws.id);
             }
           } catch (err) {
             console.error('workspace migration failed', err);
           }
-          // Firestore subscription will fire again with the new workspace
           return;
         }
 
@@ -104,8 +109,12 @@ export function useWorkspaces(uid: string | null) {
         setWorkspaces(sorted);
 
         if (!activeIdResolvedRef.current) {
-          // First load: fetch the stored active workspace ID from the profile doc
-          const storedActiveId = await getActiveWorkspaceId(uid);
+          let storedActiveId: string | null = null;
+          try {
+            storedActiveId = await getActiveWorkspaceId(uid);
+          } catch {
+            storedActiveId = await sbGetActiveWsId(uid);
+          }
           if (cancelled) return;
           activeIdResolvedRef.current = true;
           const validId =
@@ -114,8 +123,6 @@ export function useWorkspaces(uid: string | null) {
               : sorted[0]?.id ?? '';
           setActiveWsIdState(validId);
         } else {
-          // Subsequent snapshots (e.g. after create/delete): keep current active ID
-          // if it's still valid, otherwise fall back to first workspace.
           setActiveWsIdState((prev) => {
             if (sorted.some((w) => w.id === prev)) return prev;
             return sorted[0]?.id ?? '';
@@ -123,10 +130,28 @@ export function useWorkspaces(uid: string | null) {
         }
         setLoading(false);
       },
-      (err) => {
-        console.error('workspaces subscription error', err);
-        toast.error('Could not load workspaces.');
-        setLoading(false);
+      async (err) => {
+        console.error('workspaces subscription error — falling back to Supabase', err);
+        // Firestore failed: load workspaces from Supabase instead
+        try {
+          const wss = await sbGetWorkspaces(uid);
+          const sorted = [...wss].sort((a, b) => a.createdAt - b.createdAt);
+          const activeId = await sbGetActiveWsId(uid);
+          if (!cancelled) {
+            setWorkspaces(sorted);
+            const validId =
+              activeId && sorted.some((w) => w.id === activeId)
+                ? activeId
+                : sorted[0]?.id ?? '';
+            setActiveWsIdState(validId);
+            activeIdResolvedRef.current = true;
+            initializedRef.current = true;
+          }
+        } catch (sbErr) {
+          console.error('Supabase fallback also failed', sbErr);
+          toast.error('Could not load workspaces.');
+        }
+        if (!cancelled) setLoading(false);
       },
     );
 
@@ -164,8 +189,14 @@ export function useWorkspaces(uid: string | null) {
           await saveWorkspace(uid, ws);
           await fsSetActiveWsId(uid, ws.id);
         } catch (err) {
-          console.error('createWorkspace Firestore write failed', err);
-          toast.error('Could not save workspace to cloud. It is available locally this session.');
+          console.error('createWorkspace Firestore write failed — trying Supabase', err);
+          try {
+            await sbSaveWorkspace(uid, ws);
+            await sbSetActiveWsId(uid, ws.id);
+          } catch (sbErr) {
+            console.error('createWorkspace Supabase fallback failed', sbErr);
+            toast.error('Could not save workspace to cloud. It is available locally this session.');
+          }
         }
       }
       return ws.id;
@@ -183,8 +214,12 @@ export function useWorkspaces(uid: string | null) {
       } else {
         try {
           await fsSetActiveWsId(uid, wsId);
-        } catch (err) {
-          console.error('switchWorkspace failed', err);
+        } catch {
+          try {
+            await sbSetActiveWsId(uid, wsId);
+          } catch (sbErr) {
+            console.error('switchWorkspace failed', sbErr);
+          }
         }
       }
     },
@@ -221,9 +256,17 @@ export function useWorkspaces(uid: string | null) {
             const newId = remaining[0]?.id ?? '';
             await fsSetActiveWsId(uid, newId);
           }
-        } catch (err) {
-          console.error('deleteWorkspace failed', err);
-          toast.error('Could not delete workspace from cloud.');
+        } catch {
+          try {
+            await sbDeleteWorkspace(uid, wsId);
+            if (activeWorkspaceId === wsId) {
+              const newId = remaining[0]?.id ?? '';
+              await sbSetActiveWsId(uid, newId);
+            }
+          } catch (sbErr) {
+            console.error('deleteWorkspace failed', sbErr);
+            toast.error('Could not delete workspace from cloud.');
+          }
         }
       }
     },
@@ -242,9 +285,13 @@ export function useWorkspaces(uid: string | null) {
         if (!ws) return;
         try {
           await saveWorkspace(uid, { ...ws, ...patch });
-        } catch (err) {
-          console.error('updateWorkspace failed', err);
-          toast.error('Could not update workspace.');
+        } catch {
+          try {
+            await sbSaveWorkspace(uid, { ...ws, ...patch });
+          } catch (sbErr) {
+            console.error('updateWorkspace failed', sbErr);
+            toast.error('Could not update workspace.');
+          }
         }
       }
     },
