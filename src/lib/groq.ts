@@ -1,6 +1,7 @@
-import type { ChatMessage, GeneratedTask, QuizQuestion } from '../types';
+import type { ChatMessage, GeneratedTask, QuizQuestion, StudyPack, PracticeProblem } from '../types';
 
 const apiKey = import.meta.env.VITE_GROQ_API_KEY as string | undefined;
+const studyPackApiKey = (import.meta.env.VITE_GROQ_STUDYPACK_API_KEY as string | undefined) || apiKey;
 export const isGroqConfigured = Boolean(apiKey);
 
 const GROQ_MODEL = 'llama-3.3-70b-versatile';
@@ -120,6 +121,85 @@ export async function generateWeeklyProject(skill: string, topics: string[]): Pr
       ].join('\n'),
     },
   ], 1024);
+}
+
+// ---- Study Pack (dedicated second Groq key) --------------------------------
+
+function studyPackIdHash(url: string): string {
+  let hash = 0;
+  for (let i = 0; i < url.length; i++) hash = ((hash << 5) - hash + url.charCodeAt(i)) | 0;
+  return `doc_${Math.abs(hash).toString(36)}`;
+}
+
+async function groqJSONWithKey<T>(key: string, messages: { role: string; content: string }[], maxTokens = 3000): Promise<T> {
+  const res = await fetch(GROQ_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+    body: JSON.stringify({ model: GROQ_MODEL, messages, response_format: { type: 'json_object' }, temperature: 0.7, max_tokens: maxTokens }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { error?: { message?: string } };
+    throw new Error(err?.error?.message ?? `Groq API error ${res.status}`);
+  }
+  const data = await res.json() as { choices?: { message?: { content?: string } }[] };
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) throw new Error('AI returned an empty response.');
+  try { return JSON.parse(content) as T; } catch { throw new Error('AI returned malformed JSON. Try again.'); }
+}
+
+export async function generateStudyPackViaGroq(docUrl: string, docTitle: string): Promise<StudyPack> {
+  if (!studyPackApiKey) throw new Error('Study pack AI not configured. Add VITE_GROQ_STUDYPACK_API_KEY to .env.local.');
+
+  type RawPack = {
+    conceptList?: string[];
+    readingMinutes?: number;
+    quiz?: QuizQuestion[];
+    assignments?: string[];
+    problems?: { easy?: PracticeProblem[]; medium?: PracticeProblem[]; hard?: PracticeProblem[] };
+  };
+
+  const result = await groqJSONWithKey<RawPack>(studyPackApiKey, [
+    {
+      role: 'system',
+      content: [
+        'You are a senior curriculum designer. Given a documentation page URL and title,',
+        'generate a focused study pack using your knowledge of the topic.',
+        'Return ONLY a valid JSON object with these exact keys:',
+        '  conceptList: array of 3–8 key concept strings',
+        '  readingMinutes: estimated reading time as a number',
+        '  quiz: array of exactly 5 objects, each with: q (string), choices (array of 4 strings), answer (0-indexed integer), explanation (string)',
+        '  assignments: array of exactly 2 short hands-on assignment strings',
+        '  problems: object with keys easy, medium, hard — each an array of 2 objects with: prompt (string), hint (string), solution (string)',
+        'No prose outside JSON. Never invent URLs.',
+      ].join(' '),
+    },
+    {
+      role: 'user',
+      content: `Generate a study pack for:\n- URL: ${docUrl}\n- Title: ${docTitle}\n\nReturn JSON only.`,
+    },
+  ], 3000);
+
+  const conceptList = result.conceptList ?? [];
+  const readingMinutes = result.readingMinutes ?? 10;
+  const quiz: QuizQuestion[] = (result.quiz ?? []).slice(0, 5);
+  const assignments: string[] = (result.assignments ?? []).slice(0, 2);
+  const problems = {
+    easy: (result.problems?.easy ?? []).slice(0, 2) as PracticeProblem[],
+    medium: (result.problems?.medium ?? []).slice(0, 2) as PracticeProblem[],
+    hard: (result.problems?.hard ?? []).slice(0, 2) as PracticeProblem[],
+  };
+
+  return {
+    id: studyPackIdHash(docUrl),
+    docUrl,
+    docTitle,
+    generatedAt: Date.now(),
+    conceptList,
+    readingMinutes,
+    quiz,
+    assignments,
+    problems,
+  };
 }
 
 /**

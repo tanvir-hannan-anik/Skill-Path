@@ -1,6 +1,6 @@
 import { GoogleGenAI } from '@google/genai';
 import type { GeneratedTask, StudyPack, WeeklyAssignment, Schedule, QuizQuestion } from '../types';
-import { generateQuiz as groqGenerateQuiz, generateTasks as groqGenerateTasks, generateWeeklyProject as groqGenerateWeeklyProject } from './groq';
+import { generateQuiz as groqGenerateQuiz, generateTasks as groqGenerateTasks, generateWeeklyProject as groqGenerateWeeklyProject, generateStudyPackViaGroq } from './groq';
 
 export type { GeneratedTask };
 
@@ -77,9 +77,14 @@ function problemSchema() {
 }
 
 export async function generateStudyPack(docUrl: string, docTitle: string): Promise<StudyPack> {
-  if (!client) {
-    throw new Error('AI is not configured. Add VITE_GEMINI_API_KEY to .env.local.');
+  // Try Groq (dedicated study-pack key) first; fall back to Gemini.
+  try {
+    return await generateStudyPackViaGroq(docUrl, docTitle);
+  } catch (groqErr) {
+    if (!client) throw groqErr;
+    console.warn('Groq study pack failed, falling back to Gemini:', groqErr);
   }
+
   const userPrompt = `Generate a study pack for:\n- URL: ${docUrl}\n- Title: ${docTitle}\n\nReturn JSON only.`;
 
   const res = await client.models.generateContent({
