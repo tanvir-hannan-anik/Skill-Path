@@ -181,6 +181,8 @@ export function Dashboard({ onRequestAuth }: Props) {
                 schedLoading
                   ? <ContentSkeleton />
                   : <LearnContentView
+                      uid={user?.uid ?? null}
+                      wsId={activeWorkspaceId || ''}
                       date={selectedDate}
                       day={schedule[selectedDate] ?? EMPTY_DAY}
                       onUpdateDay={(d) => handleUpdateDay(selectedDate, d)}

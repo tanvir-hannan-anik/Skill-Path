@@ -7,8 +7,15 @@ import { NotesMode } from './NotesMode';
 import { motion, AnimatePresence } from 'motion/react';
 import { parseDateKey } from '../lib/dates';
 import { generateTopicQuiz, generateDailyAssignments, GeneratedTask } from '../lib/studyPack';
+import {
+  getKnowledgeCheck, saveKnowledgeCheck,
+  getDailyTasks, saveDailyTasks,
+  type KnowledgeCheckRecord, type DailyTasksRecord,
+} from '../lib/supabaseDb';
 
 interface Props {
+  uid: string | null;
+  wsId: string;
   date: string;
   day: DayContent;
   onUpdateDay: (data: DayContent) => void;
@@ -29,7 +36,7 @@ const PILLS: { id: ContentTypePill; label: string; icon: ReactNode }[] = [
   { id: 'assignment', label: 'Daily Task', icon: <ClipboardList className="w-[14px] h-[14px]" /> },
 ];
 
-export function LearnContentView({ date, day, onUpdateDay, onScheduleVideoForDate }: Props) {
+export function LearnContentView({ uid, wsId, date, day, onUpdateDay, onScheduleVideoForDate }: Props) {
   const [activePill, setActivePill] = useState<ContentTypePill>('video');
   const [titleDraft, setTitleDraft] = useState(day.topicTitle ?? '');
 
@@ -158,10 +165,22 @@ export function LearnContentView({ date, day, onUpdateDay, onScheduleVideoForDat
           />
         )}
         {activePill === 'quiz' && (
-          <QuizSection quizzes={day.quizzes ?? []} topic={day.topicTitle ?? ''} />
+          <QuizSection
+            quizzes={day.quizzes ?? []}
+            topic={day.topicTitle ?? ''}
+            uid={uid}
+            wsId={wsId}
+            date={date}
+          />
         )}
         {activePill === 'assignment' && (
-          <AssignmentSection assignments={day.assignments ?? []} topic={day.topicTitle ?? ''} />
+          <AssignmentSection
+            assignments={day.assignments ?? []}
+            topic={day.topicTitle ?? ''}
+            uid={uid}
+            wsId={wsId}
+            date={date}
+          />
         )}
       </motion.div>
     </div>
@@ -173,7 +192,15 @@ export function LearnContentView({ date, day, onUpdateDay, onScheduleVideoForDat
 type QuizState = 'idle' | 'loading' | 'taking' | 'done';
 const CHOICE_LABELS = ['A', 'B', 'C', 'D'];
 
-function QuizSection({ quizzes, topic }: { quizzes: QuizPlan[]; topic: string }) {
+interface QuizSectionProps {
+  quizzes: QuizPlan[];
+  topic: string;
+  uid: string | null;
+  wsId: string;
+  date: string;
+}
+
+function QuizSection({ quizzes, topic, uid, wsId, date }: QuizSectionProps) {
   const [quizState, setQuizState] = useState<QuizState>('idle');
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
   const [currentIdx, setCurrentIdx] = useState(0);
@@ -181,10 +208,38 @@ function QuizSection({ quizzes, topic }: { quizzes: QuizPlan[]; topic: string })
   const [showExplanation, setShowExplanation] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activePlan, setActivePlan] = useState<QuizPlan | null>(null);
+  const [savedScore, setSavedScore] = useState<number | null>(null);
 
   const effectiveTopic = activePlan?.topic || topic;
-  const effectiveCount = activePlan?.count ?? 5;
   const canGenerate = !!effectiveTopic.trim();
+
+  // Load saved quiz from Supabase on mount / date change
+  useEffect(() => {
+    if (!uid || !wsId || !date) return;
+    let cancelled = false;
+    getKnowledgeCheck(uid, wsId, date).then(rec => {
+      if (cancelled || !rec || rec.questions.length === 0) return;
+      setQuestions(rec.questions);
+      setSelectedAnswers(rec.answers);
+      setSavedScore(rec.score);
+      setQuizState(rec.score !== null ? 'done' : rec.answers.some(a => a !== null) ? 'taking' : 'idle');
+      setCurrentIdx(rec.answers.findIndex(a => a === null) === -1 ? rec.questions.length - 1 : Math.max(0, rec.answers.findIndex(a => a === null)));
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [uid, wsId, date]);
+
+  async function persist(qs: QuizQuestion[], ans: (number | null)[], score: number | null) {
+    if (!uid || !wsId) return;
+    const record: KnowledgeCheckRecord = {
+      topic: effectiveTopic,
+      questions: qs,
+      answers: ans,
+      score,
+      generatedAt: Date.now(),
+      ...(score !== null ? { completedAt: Date.now() } : {}),
+    };
+    saveKnowledgeCheck(uid, wsId, date, record).catch(console.error);
+  }
 
   async function handleGenerate(plan?: QuizPlan) {
     const t = plan?.topic || topic;
@@ -195,11 +250,14 @@ function QuizSection({ quizzes, topic }: { quizzes: QuizPlan[]; topic: string })
     setError(null);
     try {
       const qs = await generateTopicQuiz(t, c);
+      const emptyAnswers = new Array(qs.length).fill(null);
       setQuestions(qs);
-      setSelectedAnswers(new Array(qs.length).fill(null));
+      setSelectedAnswers(emptyAnswers);
+      setSavedScore(null);
       setCurrentIdx(0);
       setShowExplanation(false);
       setQuizState('taking');
+      persist(qs, emptyAnswers, null);
     } catch (err) {
       setError((err as Error).message);
       setQuizState('idle');
@@ -212,6 +270,7 @@ function QuizSection({ quizzes, topic }: { quizzes: QuizPlan[]; topic: string })
     updated[currentIdx] = choiceIdx;
     setSelectedAnswers(updated);
     setShowExplanation(true);
+    persist(questions, updated, null);
   }
 
   function handleNext() {
@@ -219,15 +278,21 @@ function QuizSection({ quizzes, topic }: { quizzes: QuizPlan[]; topic: string })
       setCurrentIdx(currentIdx + 1);
       setShowExplanation(false);
     } else {
+      const score = selectedAnswers.filter((a, i) => a === questions[i]?.answer).length;
+      setSavedScore(score);
       setQuizState('done');
+      persist(questions, selectedAnswers, score);
     }
   }
 
   function handleRetake() {
-    setSelectedAnswers(new Array(questions.length).fill(null));
+    const emptyAnswers = new Array(questions.length).fill(null);
+    setSelectedAnswers(emptyAnswers);
+    setSavedScore(null);
     setCurrentIdx(0);
     setShowExplanation(false);
     setQuizState('taking');
+    persist(questions, emptyAnswers, null);
   }
 
   function handleReset() {
@@ -235,6 +300,7 @@ function QuizSection({ quizzes, topic }: { quizzes: QuizPlan[]; topic: string })
     setQuestions([]);
     setActivePlan(null);
     setError(null);
+    setSavedScore(null);
   }
 
   // ---- Idle / loading ----
@@ -436,7 +502,7 @@ function QuizSection({ quizzes, topic }: { quizzes: QuizPlan[]; topic: string })
   }
 
   // ---- Results ----
-  const score = selectedAnswers.filter((a, i) => a === questions[i]?.answer).length;
+  const score = savedScore ?? selectedAnswers.filter((a, i) => a === questions[i]?.answer).length;
   const pct = Math.round((score / questions.length) * 100);
   const scoreColor = pct >= 80 ? 'text-emerald-600' : pct >= 60 ? 'text-amber-600' : 'text-red-600';
   const scoreBg = pct >= 80 ? 'bg-emerald-50 border-emerald-200' : pct >= 60 ? 'bg-amber-50 border-amber-200' : 'bg-red-50 border-red-200';
@@ -496,7 +562,15 @@ function QuizSection({ quizzes, topic }: { quizzes: QuizPlan[]; topic: string })
 
 // ---- Assignment section -----------------------------------------------------
 
-function AssignmentSection({ assignments, topic }: { assignments: AssignmentPlan[]; topic: string }) {
+interface AssignmentSectionProps {
+  assignments: AssignmentPlan[];
+  topic: string;
+  uid: string | null;
+  wsId: string;
+  date: string;
+}
+
+function AssignmentSection({ assignments, topic, uid, wsId, date }: AssignmentSectionProps) {
   const [generatedTasks, setGeneratedTasks] = useState<GeneratedTask[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -504,6 +578,24 @@ function AssignmentSection({ assignments, topic }: { assignments: AssignmentPlan
   const [done, setDone] = useState<Set<string>>(new Set());
 
   const canGenerate = !!topic.trim();
+
+  // Load saved tasks from Supabase on mount / date change
+  useEffect(() => {
+    if (!uid || !wsId || !date) return;
+    let cancelled = false;
+    getDailyTasks(uid, wsId, date).then(rec => {
+      if (cancelled || !rec || rec.tasks.length === 0) return;
+      setGeneratedTasks(rec.tasks);
+      setDone(new Set(rec.doneIds));
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [uid, wsId, date]);
+
+  function persistTasks(tasks: GeneratedTask[], doneIds: string[]) {
+    if (!uid || !wsId) return;
+    const record: DailyTasksRecord = { tasks, doneIds, generatedAt: Date.now() };
+    saveDailyTasks(uid, wsId, date, record).catch(console.error);
+  }
 
   async function handleGenerate() {
     if (!canGenerate) return;
@@ -514,6 +606,7 @@ function AssignmentSection({ assignments, topic }: { assignments: AssignmentPlan
       setGeneratedTasks(tasks);
       setExpanded(new Set());
       setDone(new Set());
+      persistTasks(tasks, []);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -533,6 +626,7 @@ function AssignmentSection({ assignments, topic }: { assignments: AssignmentPlan
     setDone(prev => {
       const next = new Set(prev);
       next.has(id) ? next.delete(id) : next.add(id);
+      if (generatedTasks) persistTasks(generatedTasks, [...next]);
       return next;
     });
   }

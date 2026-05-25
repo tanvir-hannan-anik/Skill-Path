@@ -7,6 +7,8 @@
 import { supabase } from './supabase';
 import type {
   DayContent,
+  GeneratedTask,
+  QuizQuestion,
   Schedule,
   UserProfile,
   ChatMessage,
@@ -16,6 +18,23 @@ import type {
   WeeklyAssignment,
   Workspace,
 } from '../types';
+
+// ---- Shared types for AI-generated content ----------------------------------
+
+export interface KnowledgeCheckRecord {
+  topic: string;
+  questions: QuizQuestion[];
+  answers: (number | null)[];
+  score: number | null;
+  generatedAt: number;
+  completedAt?: number;
+}
+
+export interface DailyTasksRecord {
+  tasks: GeneratedTask[];
+  doneIds: string[];
+  generatedAt: number;
+}
 
 // ---- Profiles ---------------------------------------------------------------
 
@@ -258,5 +277,65 @@ export async function saveWeeklyAssignment(uid: string, a: WeeklyAssignment) {
     week_key: a.weekKey,
     user_id: uid,
     data: a as unknown as Record<string, unknown>,
+  });
+}
+
+// ---- Knowledge checks -------------------------------------------------------
+
+function kcId(uid: string, wsId: string, date: string) {
+  return `${uid}_${wsId}_${date}`;
+}
+
+export async function getKnowledgeCheck(
+  uid: string, wsId: string, date: string
+): Promise<KnowledgeCheckRecord | null> {
+  const { data } = await supabase
+    .from('knowledge_checks')
+    .select('data')
+    .eq('id', kcId(uid, wsId, date))
+    .maybeSingle();
+  return data ? (data.data as unknown as KnowledgeCheckRecord) : null;
+}
+
+export async function saveKnowledgeCheck(
+  uid: string, wsId: string, date: string, record: KnowledgeCheckRecord
+) {
+  await supabase.from('knowledge_checks').upsert({
+    id: kcId(uid, wsId, date),
+    user_id: uid,
+    workspace_id: wsId,
+    date,
+    data: record as unknown as Record<string, unknown>,
+    generated_at: record.generatedAt,
+  });
+}
+
+// ---- Daily tasks -------------------------------------------------------------
+
+function dtId(uid: string, wsId: string, date: string) {
+  return `${uid}_${wsId}_${date}`;
+}
+
+export async function getDailyTasks(
+  uid: string, wsId: string, date: string
+): Promise<DailyTasksRecord | null> {
+  const { data } = await supabase
+    .from('daily_tasks')
+    .select('data')
+    .eq('id', dtId(uid, wsId, date))
+    .maybeSingle();
+  return data ? (data.data as unknown as DailyTasksRecord) : null;
+}
+
+export async function saveDailyTasks(
+  uid: string, wsId: string, date: string, record: DailyTasksRecord
+) {
+  await supabase.from('daily_tasks').upsert({
+    id: dtId(uid, wsId, date),
+    user_id: uid,
+    workspace_id: wsId,
+    date,
+    data: record as unknown as Record<string, unknown>,
+    generated_at: record.generatedAt,
   });
 }
