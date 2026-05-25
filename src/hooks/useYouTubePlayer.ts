@@ -87,23 +87,23 @@ export function useYouTubePlayer(videoId: string | null) {
           onReady: () => {
             if (cancelled) return;
             setReady(true);
+            setCurrentSec(0);
             setDurationSec(playerRef.current?.getDuration() ?? 0);
           },
-          onStateChange: () => {
+          onStateChange: (event: { data: number }) => {
             if (!playerRef.current) return;
             setDurationSec(playerRef.current.getDuration() ?? 0);
-            const state = playerRef.current.getPlayerState();
-            const PLAYING = window.YT?.PlayerState.PLAYING;
+            const isPlaying = event.data === 1; // 1 = YT.PlayerState.PLAYING
             // Poll while playing.
-            if (state === PLAYING && !pollRef.current) {
+            if (isPlaying && !pollRef.current) {
               pollRef.current = setInterval(() => {
                 const t = playerRef.current?.getCurrentTime() ?? 0;
-                setCurrentSec(t);
+                setCurrentSec(Math.floor(t));
               }, 1000);
-            } else if (state !== PLAYING && pollRef.current) {
+            } else if (!isPlaying && pollRef.current) {
               clearInterval(pollRef.current);
               pollRef.current = null;
-              setCurrentSec(playerRef.current?.getCurrentTime() ?? 0);
+              setCurrentSec(Math.floor(playerRef.current?.getCurrentTime() ?? 0));
             }
           },
         },

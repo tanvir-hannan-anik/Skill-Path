@@ -50,7 +50,7 @@ export function VideoPortionScheduler({
   const [error, setError] = useState<string | null>(null);
   const [quickSplitMax, setQuickSplitMax] = useState(7);
 
-  const totalSec = plan?.totalSec ?? totalSecHint ?? 0;
+  const totalSec = Math.max(plan?.totalSec ?? 0, totalSecHint ?? 0);
 
   // Auto-update current session's watchedSec whenever currentSec advances.
   useEffect(() => {
@@ -123,6 +123,7 @@ export function VideoPortionScheduler({
     setNewEnd('');
     // Suggest the next session start = the end we just used.
     setNewStart(newEnd);
+    onScheduleVideoForDate?.(newDate, { url, title, source });
   }
 
   function handleRemove(id: string) {
