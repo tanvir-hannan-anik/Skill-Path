@@ -1,4 +1,5 @@
-import { BookOpen, Clock, Sparkles, Loader2, RefreshCw, XCircle, FileText, Pencil } from 'lucide-react';
+import React from 'react';
+import { BookOpen, Clock, Sparkles, RefreshCw, XCircle, FileText, Pencil } from 'lucide-react';
 import type { StudyPack } from '../types';
 
 interface Props {
@@ -11,11 +12,15 @@ interface Props {
 
 export function StudyPackView({ pack, loading, error, onGenerate, onRegenerate }: Props) {
   if (loading) {
+    const DotLottie = 'dotlottie-wc' as unknown as React.ElementType;
     return (
-      <div className="flex flex-col items-center justify-center py-16 gap-3 text-text-secondary">
-        <Loader2 className="w-6 h-6 animate-spin" />
-        <p className="text-sm">Reading the page and generating your study pack…</p>
-        <p className="text-xs text-text-muted">This usually takes 10–20 seconds.</p>
+      <div className="flex flex-col items-center justify-center py-10">
+        <DotLottie
+          src="https://lottie.host/032219e0-ead6-4de6-a8de-4913de4a83cb/3uDAtEKI3e.lottie"
+          style={{ width: 200, height: 200 }}
+          autoplay="true"
+          loop="true"
+        />
       </div>
     );
   }

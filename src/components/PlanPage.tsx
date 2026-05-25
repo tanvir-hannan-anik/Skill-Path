@@ -737,12 +737,9 @@ export function PlanPage({ schedule, onUpdateDay, workspaceName }: Props) {
         return `${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
       });
     }
-    const base = new Date(currentMonth);
-    const dow = base.getDay();
-    base.setDate(base.getDate() - dow);
+    // Week mode: currentMonth holds the Sunday that starts this week.
     return Array.from({ length: 7 }, (_, i) => {
-      const d = new Date(base);
-      d.setDate(base.getDate() + i);
+      const d = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), currentMonth.getDate() + i);
       return toDateKey(d);
     });
   }, [currentMonth, daysInMonth, viewMode]);
@@ -764,7 +761,27 @@ export function PlanPage({ schedule, onUpdateDay, workspaceName }: Props) {
     }, 0),
   [dateKeys, schedule]);
 
-  const monthLabel = currentMonth.toLocaleString('default', { month: 'long', year: 'numeric' });
+  /** Returns midnight of the Sunday that starts the week containing `d`. */
+  function weekSunday(d: Date): Date {
+    const s = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    s.setDate(s.getDate() - s.getDay());
+    return s;
+  }
+
+  const monthLabel = useMemo(() => {
+    if (viewMode === 'month') {
+      return currentMonth.toLocaleString('default', { month: 'long', year: 'numeric' });
+    }
+    const end = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), currentMonth.getDate() + 6);
+    const sameMonth = currentMonth.getMonth() === end.getMonth();
+    const startStr = currentMonth.toLocaleDateString('default', { month: 'short', day: 'numeric' });
+    const endStr = end.toLocaleDateString('default', {
+      month: sameMonth ? undefined : 'short',
+      day: 'numeric',
+      year: 'numeric',
+    } as Intl.DateTimeFormatOptions);
+    return `${startStr} – ${endStr}`;
+  }, [currentMonth, viewMode]);
 
   const handleAdd = (dateKey: string) => setModal({ dateKey });
 
@@ -777,8 +794,30 @@ export function PlanPage({ schedule, onUpdateDay, workspaceName }: Props) {
     else if (type === 'note') onUpdateDay(dateKey, { ...cur, notes: [...(cur.notes ?? []), data as NotePlan] });
   };
 
-  const handlePrev = () => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1));
-  const handleNext = () => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1));
+  const handlePrev = () => {
+    if (viewMode === 'week') {
+      setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth(), currentMonth.getDate() - 7));
+    } else {
+      setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1));
+    }
+  };
+
+  const handleNext = () => {
+    if (viewMode === 'week') {
+      setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth(), currentMonth.getDate() + 7));
+    } else {
+      setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1));
+    }
+  };
+
+  const handleSetViewMode = (mode: 'month' | 'week') => {
+    if (mode === 'week') {
+      setCurrentMonth(weekSunday(today));
+    } else {
+      setCurrentMonth(new Date(today.getFullYear(), today.getMonth(), 1));
+    }
+    setViewMode(mode);
+  };
 
   return (
     <div className="max-w-2xl mx-auto w-full flex flex-col h-full">
@@ -790,7 +829,7 @@ export function PlanPage({ schedule, onUpdateDay, workspaceName }: Props) {
         </div>
         <div className="flex bg-canvas border border-border-strong rounded-xl p-1 gap-1">
           {(['week', 'month'] as const).map(m => (
-            <button key={m} onClick={() => setViewMode(m)} className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all capitalize ${viewMode === m ? 'bg-white text-primary shadow-sm border border-border-strong' : 'text-text-muted hover:text-primary'}`}>{m}</button>
+            <button key={m} onClick={() => handleSetViewMode(m)} className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all capitalize ${viewMode === m ? 'bg-white text-primary shadow-sm border border-border-strong' : 'text-text-muted hover:text-primary'}`}>{m}</button>
           ))}
         </div>
       </div>
@@ -802,7 +841,7 @@ export function PlanPage({ schedule, onUpdateDay, workspaceName }: Props) {
           <button onClick={handlePrev} className="w-8 h-8 flex items-center justify-center rounded-xl border border-border-strong bg-white text-text-secondary hover:text-primary transition-colors">
             <ChevronLeft className="w-4 h-4" />
           </button>
-          <button onClick={() => setCurrentMonth(new Date(today.getFullYear(), today.getMonth(), 1))}
+          <button onClick={() => viewMode === 'week' ? setCurrentMonth(weekSunday(today)) : setCurrentMonth(new Date(today.getFullYear(), today.getMonth(), 1))}
             className="px-3 h-8 text-xs font-semibold rounded-xl border border-border-strong bg-white text-text-secondary hover:text-primary transition-colors">
             Today
           </button>
