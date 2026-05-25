@@ -147,58 +147,74 @@ async function groqJSONWithKey<T>(key: string, messages: { role: string; content
   try { return JSON.parse(content) as T; } catch { throw new Error('AI returned malformed JSON. Try again.'); }
 }
 
+/** Fetches the raw text of a documentation page via a CORS proxy. Returns null on failure. */
+async function fetchDocText(url: string): Promise<string | null> {
+  const proxies = [
+    { url: `https://corsproxy.io/?url=${encodeURIComponent(url)}`, json: false },
+    { url: `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`, json: true },
+  ];
+
+  for (const proxy of proxies) {
+    try {
+      const res = await fetch(proxy.url, { signal: AbortSignal.timeout(12000) });
+      if (!res.ok) continue;
+      const html: string = proxy.json
+        ? ((await res.json()) as { contents?: string }).contents ?? ''
+        : await res.text();
+      if (!html || html.length < 200) continue;
+
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      doc.querySelectorAll('script,style,nav,header,footer,aside,[role="navigation"],[role="banner"],[role="complementary"]').forEach((el) => el.remove());
+      const text = (doc.body?.innerText ?? doc.documentElement.innerText ?? '').replace(/\s+/g, ' ').trim();
+      if (text.length > 200) return text.slice(0, 10000);
+    } catch {
+      // try next proxy
+    }
+  }
+  return null;
+}
+
 export async function generateStudyPackViaGroq(docUrl: string, docTitle: string): Promise<StudyPack> {
   if (!studyPackApiKey) throw new Error('Study pack AI not configured. Add VITE_GROQ_STUDYPACK_API_KEY to .env.local.');
 
   type RawPack = {
+    summary?: string;
     conceptList?: string[];
     readingMinutes?: number;
-    quiz?: QuizQuestion[];
     assignments?: string[];
-    problems?: { easy?: PracticeProblem[]; medium?: PracticeProblem[]; hard?: PracticeProblem[] };
   };
+
+  // Attempt to fetch the real page content so Groq can summarise it accurately.
+  const docText = await fetchDocText(docUrl);
+
+  const systemMsg = [
+    'You are a senior technical educator.',
+    'Given documentation content (or a URL + title if content is unavailable), produce a JSON study pack with:',
+    '  summary: a clear 4–6 paragraph summary of the page content written in plain English (what it covers, key points, how things work)',
+    '  conceptList: 3–8 key concept strings extracted from the content',
+    '  readingMinutes: estimated reading time as a number',
+    '  assignments: exactly 2 practical hands-on assignment strings a learner can do after reading',
+    'Return ONLY valid JSON. No prose outside JSON.',
+  ].join(' ');
+
+  const userMsg = docText
+    ? `URL: ${docUrl}\nTitle: ${docTitle}\n\nPage content:\n${docText}\n\nReturn JSON only.`
+    : `URL: ${docUrl}\nTitle: ${docTitle}\n\nNo page content available — use your knowledge of this topic.\n\nReturn JSON only.`;
 
   const result = await groqJSONWithKey<RawPack>(studyPackApiKey, [
-    {
-      role: 'system',
-      content: [
-        'You are a senior curriculum designer. Given a documentation page URL and title,',
-        'generate a focused study pack using your knowledge of the topic.',
-        'Return ONLY a valid JSON object with these exact keys:',
-        '  conceptList: array of 3–8 key concept strings',
-        '  readingMinutes: estimated reading time as a number',
-        '  quiz: array of exactly 5 objects, each with: q (string), choices (array of 4 strings), answer (0-indexed integer), explanation (string)',
-        '  assignments: array of exactly 2 short hands-on assignment strings',
-        '  problems: object with keys easy, medium, hard — each an array of 2 objects with: prompt (string), hint (string), solution (string)',
-        'No prose outside JSON. Never invent URLs.',
-      ].join(' '),
-    },
-    {
-      role: 'user',
-      content: `Generate a study pack for:\n- URL: ${docUrl}\n- Title: ${docTitle}\n\nReturn JSON only.`,
-    },
+    { role: 'system', content: systemMsg },
+    { role: 'user', content: userMsg },
   ], 3000);
-
-  const conceptList = result.conceptList ?? [];
-  const readingMinutes = result.readingMinutes ?? 10;
-  const quiz: QuizQuestion[] = (result.quiz ?? []).slice(0, 5);
-  const assignments: string[] = (result.assignments ?? []).slice(0, 2);
-  const problems = {
-    easy: (result.problems?.easy ?? []).slice(0, 2) as PracticeProblem[],
-    medium: (result.problems?.medium ?? []).slice(0, 2) as PracticeProblem[],
-    hard: (result.problems?.hard ?? []).slice(0, 2) as PracticeProblem[],
-  };
 
   return {
     id: studyPackIdHash(docUrl),
     docUrl,
     docTitle,
     generatedAt: Date.now(),
-    conceptList,
-    readingMinutes,
-    quiz,
-    assignments,
-    problems,
+    summary: result.summary ?? '',
+    conceptList: result.conceptList ?? [],
+    readingMinutes: result.readingMinutes ?? 10,
+    assignments: (result.assignments ?? []).slice(0, 2),
   };
 }
 

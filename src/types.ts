@@ -141,11 +141,14 @@ export interface StudyPack {
   id: string;
   docUrl: string;
   docTitle: string;
+  /** Full summary of the actual documentation page content. */
+  summary?: string;
   conceptList: string[];
   readingMinutes: number;
-  quiz: QuizQuestion[];
   assignments: string[];
-  problems: {
+  /** Legacy — kept for backward-compat with cached packs. */
+  quiz?: QuizQuestion[];
+  problems?: {
     easy: PracticeProblem[];
     medium: PracticeProblem[];
     hard: PracticeProblem[];

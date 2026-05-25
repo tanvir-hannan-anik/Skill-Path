@@ -19,62 +19,22 @@ function studyPackId(url: string): string {
 }
 
 const STUDY_PACK_SYSTEM = [
-  'You are a senior curriculum designer who turns a single documentation page',
-  'into a focused study pack: key concepts, an estimated reading time, a 5-question',
-  'multiple-choice quiz, 2 short hands-on assignments, and 6 practice problems',
-  '(2 easy, 2 medium, 2 hard) each with a hint and a complete solution.',
-  '',
-  'You will receive a URL and title. Use your knowledge of the topic to produce',
-  'high-quality content. Never invent URLs. Never reference content you cannot',
-  'reasonably infer from the title and well-known docs.',
-  '',
+  'You are a senior technical educator who turns a documentation page into a focused study pack.',
+  'You will receive a URL and title. Use your knowledge of the topic to produce high-quality content.',
+  'Never invent URLs.',
   'Respond with ONLY valid JSON matching the schema. No prose.',
 ].join('\n');
 
 const STUDY_PACK_JSON_SCHEMA = {
   type: 'object',
   properties: {
+    summary: { type: 'string' },
     conceptList: { type: 'array', items: { type: 'string' }, minItems: 3, maxItems: 8 },
     readingMinutes: { type: 'number' },
-    quiz: {
-      type: 'array',
-      minItems: 5, maxItems: 5,
-      items: {
-        type: 'object',
-        properties: {
-          q: { type: 'string' },
-          choices: { type: 'array', items: { type: 'string' }, minItems: 4, maxItems: 4 },
-          answer: { type: 'number' },
-          explanation: { type: 'string' },
-        },
-        required: ['q', 'choices', 'answer', 'explanation'],
-      },
-    },
     assignments: { type: 'array', items: { type: 'string' }, minItems: 2, maxItems: 2 },
-    problems: {
-      type: 'object',
-      properties: {
-        easy: { type: 'array', items: problemSchema(), minItems: 2, maxItems: 2 },
-        medium: { type: 'array', items: problemSchema(), minItems: 2, maxItems: 2 },
-        hard: { type: 'array', items: problemSchema(), minItems: 2, maxItems: 2 },
-      },
-      required: ['easy', 'medium', 'hard'],
-    },
   },
-  required: ['conceptList', 'readingMinutes', 'quiz', 'assignments', 'problems'],
+  required: ['summary', 'conceptList', 'readingMinutes', 'assignments'],
 };
-
-function problemSchema() {
-  return {
-    type: 'object',
-    properties: {
-      prompt: { type: 'string' },
-      hint: { type: 'string' },
-      solution: { type: 'string' },
-    },
-    required: ['prompt', 'solution'],
-  };
-}
 
 export async function generateStudyPack(docUrl: string, docTitle: string): Promise<StudyPack> {
   // Try Groq (dedicated study-pack key) first; fall back to Gemini.
@@ -85,7 +45,7 @@ export async function generateStudyPack(docUrl: string, docTitle: string): Promi
     console.warn('Groq study pack failed, falling back to Gemini:', groqErr);
   }
 
-  const userPrompt = `Generate a study pack for:\n- URL: ${docUrl}\n- Title: ${docTitle}\n\nReturn JSON only.`;
+  const userPrompt = `Generate a study pack for:\n- URL: ${docUrl}\n- Title: ${docTitle}\n\nReturn JSON with: summary (4–6 paragraph plain-English summary), conceptList (3–8 key concepts), readingMinutes (number), assignments (2 practical tasks). JSON only.`;
 
   const res = await client.models.generateContent({
     model: MODEL,
@@ -100,7 +60,7 @@ export async function generateStudyPack(docUrl: string, docTitle: string): Promi
   const raw = res.text;
   if (!raw) throw new Error('AI returned an empty response.');
 
-  let parsed: Omit<StudyPack, 'id' | 'docUrl' | 'docTitle' | 'generatedAt'>;
+  let parsed: { summary?: string; conceptList?: string[]; readingMinutes?: number; assignments?: string[] };
   try {
     parsed = JSON.parse(raw);
   } catch {
@@ -112,7 +72,10 @@ export async function generateStudyPack(docUrl: string, docTitle: string): Promi
     docUrl,
     docTitle,
     generatedAt: Date.now(),
-    ...parsed,
+    summary: parsed.summary ?? '',
+    conceptList: parsed.conceptList ?? [],
+    readingMinutes: parsed.readingMinutes ?? 10,
+    assignments: (parsed.assignments ?? []).slice(0, 2),
   };
 }
 
