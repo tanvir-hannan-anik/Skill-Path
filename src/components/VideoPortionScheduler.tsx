@@ -187,7 +187,7 @@ export function VideoPortionScheduler({
           </div>
           <div className="h-2 bg-white border border-border-strong rounded-full overflow-hidden">
             <motion.div
-              className="h-full bg-primary rounded-full"
+              className="h-full bg-accent rounded-full"
               initial={{ width: 0 }}
               animate={{ width: `${overallPct}%` }}
               transition={{ type: 'spring', stiffness: 80, damping: 18 }}
@@ -254,7 +254,7 @@ export function VideoPortionScheduler({
                   </div>
                   <div className="flex items-center gap-2 mt-1.5">
                     <div className="flex-1 h-1.5 bg-canvas border border-border-strong rounded-full overflow-hidden">
-                      <div className={`h-full ${s.completed ? 'bg-emerald-500' : 'bg-primary'} transition-all`} style={{ width: `${pct}%` }} />
+                      <div className={`h-full ${s.completed ? 'bg-emerald-500' : 'bg-accent'} transition-all`} style={{ width: `${pct}%` }} />
                     </div>
                     <span className="text-[10px] font-bold text-text-muted tabular-nums shrink-0">{pct}%</span>
                   </div>
