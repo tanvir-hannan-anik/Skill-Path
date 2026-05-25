@@ -192,6 +192,10 @@ export function Dashboard({ onRequestAuth }: Props) {
                           handleUpdateDay(date, { ...dayData, videos: [...dayData.videos, video] });
                         }
                       }}
+                      onUnscheduleVideoForDate={(date, videoUrl) => {
+                        const dayData = schedule[date] ?? EMPTY_DAY;
+                        handleUpdateDay(date, { ...dayData, videos: dayData.videos.filter((v) => v.url !== videoUrl) });
+                      }}
                     />
               )}
 

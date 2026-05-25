@@ -14,9 +14,10 @@ interface Props {
   onAddVideo: (v: Resource) => void;
   onRemoveVideo: (url: string) => void;
   onScheduleVideoForDate?: (date: string, video: Resource) => void;
+  onUnscheduleVideoForDate?: (date: string, videoUrl: string) => void;
 }
 
-export function VideoMode({ videos, onAddVideo, onRemoveVideo, onScheduleVideoForDate }: Props) {
+export function VideoMode({ videos, onAddVideo, onRemoveVideo, onScheduleVideoForDate, onUnscheduleVideoForDate }: Props) {
   const { user } = useAuth();
   const toast = useToast();
   const [url, setUrl] = useState('');
@@ -147,6 +148,7 @@ export function VideoMode({ videos, onAddVideo, onRemoveVideo, onScheduleVideoFo
           title={activeVideo.title}
           source={activeVideo.source}
           onScheduleVideoForDate={onScheduleVideoForDate}
+          onUnscheduleVideoForDate={onUnscheduleVideoForDate}
         />
       )}
 

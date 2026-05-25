@@ -17,6 +17,8 @@ interface Props {
   source: string;
   /** Called for each day a session is created so the video is added to that day's schedule. */
   onScheduleVideoForDate?: (date: string, video: import('../types').Resource) => void;
+  /** Called when the last session for a date is removed so the video can be pulled from that day's schedule. */
+  onUnscheduleVideoForDate?: (date: string, videoUrl: string) => void;
 }
 
 function newSessionId() {
@@ -42,7 +44,7 @@ function parseTimestamp(input: string): number | null {
  * `currentSec` and marks sessions complete when the user reaches `endSec`.
  */
 export function VideoPortionScheduler({
-  plan, onChange, onSeek, currentSec, totalSecHint, videoId, url, title, source, onScheduleVideoForDate,
+  plan, onChange, onSeek, currentSec, totalSecHint, videoId, url, title, source, onScheduleVideoForDate, onUnscheduleVideoForDate,
 }: Props) {
   const [newDate, setNewDate] = useState(() => toDateKey());
   const [newStart, setNewStart] = useState('0:00');
@@ -128,7 +130,13 @@ export function VideoPortionScheduler({
 
   function handleRemove(id: string) {
     const base = ensurePlan();
-    onChange({ ...base, sessions: base.sessions.filter((s) => s.id !== id) });
+    const removed = base.sessions.find((s) => s.id === id);
+    const nextSessions = base.sessions.filter((s) => s.id !== id);
+    onChange({ ...base, sessions: nextSessions });
+    if (removed && onUnscheduleVideoForDate) {
+      const stillScheduled = nextSessions.some((s) => s.date === removed.date);
+      if (!stillScheduled) onUnscheduleVideoForDate(removed.date, url);
+    }
   }
 
   function handleQuickSplit(parts: number) {
