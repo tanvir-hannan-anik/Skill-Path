@@ -160,6 +160,13 @@ export interface WeeklyAssignment {
   generatedAt: number;
 }
 
+export interface GeneratedTask {
+  id: string;
+  title: string;
+  description: string;
+  difficulty: 'Easy' | 'Medium' | 'Hard';
+}
+
 // ---- Saved-for-later -------------------------------------------------------
 
 export interface SavedDoc extends Resource {

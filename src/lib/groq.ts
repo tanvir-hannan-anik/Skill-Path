@@ -1,4 +1,4 @@
-import type { ChatMessage } from '../types';
+import type { ChatMessage, GeneratedTask, QuizQuestion } from '../types';
 
 const apiKey = import.meta.env.VITE_GROQ_API_KEY as string | undefined;
 export const isGroqConfigured = Boolean(apiKey);
@@ -22,6 +22,104 @@ function systemPrompt(skill: string): string {
     'When giving study plans, propose realistic daily breakdowns.',
     'Suggest concrete next actions. Never invent specific URLs.',
   ].join(' ');
+}
+
+async function groqJSON<T>(messages: { role: string; content: string }[], maxTokens = 2048): Promise<T> {
+  if (!apiKey) throw new Error('AI not configured. Add VITE_GROQ_API_KEY to .env.local.');
+  const res = await fetch(GROQ_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({ model: GROQ_MODEL, messages, response_format: { type: 'json_object' }, temperature: 0.7, max_tokens: maxTokens }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { error?: { message?: string } };
+    throw new Error(err?.error?.message ?? `Groq API error ${res.status}`);
+  }
+  const data = await res.json() as { choices?: { message?: { content?: string } }[] };
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) throw new Error('AI returned an empty response.');
+  try { return JSON.parse(content) as T; } catch { throw new Error('AI returned malformed JSON. Try again.'); }
+}
+
+async function groqText(messages: { role: string; content: string }[], maxTokens = 1024): Promise<string> {
+  if (!apiKey) throw new Error('AI not configured. Add VITE_GROQ_API_KEY to .env.local.');
+  const res = await fetch(GROQ_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({ model: GROQ_MODEL, messages, temperature: 0.8, max_tokens: maxTokens }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { error?: { message?: string } };
+    throw new Error(err?.error?.message ?? `Groq API error ${res.status}`);
+  }
+  const data = await res.json() as { choices?: { message?: { content?: string } }[] };
+  const text = data.choices?.[0]?.message?.content?.trim();
+  if (!text) throw new Error('AI returned an empty response.');
+  return text;
+}
+
+export async function generateQuiz(topic: string, count: number = 5): Promise<QuizQuestion[]> {
+  const n = Math.max(1, Math.min(count, 10));
+  const result = await groqJSON<{ questions?: QuizQuestion[] } | QuizQuestion[]>([
+    { role: 'system', content: 'You are a quiz generator. Always return valid JSON.' },
+    {
+      role: 'user',
+      content: `Generate ${n} multiple-choice quiz questions about: "${topic}".
+
+Return a JSON object: {"questions": [...]}
+Each question object must have:
+- "q": the question text (string)
+- "choices": exactly 4 answer options (array of 4 strings)
+- "answer": 0-indexed integer of the correct choice (0, 1, 2, or 3)
+- "explanation": 1-2 sentence explanation of the correct answer (string)`,
+    },
+  ], 2048);
+  const questions = Array.isArray(result) ? result : ((result as { questions?: QuizQuestion[] }).questions ?? []);
+  return questions.slice(0, n) as QuizQuestion[];
+}
+
+export async function generateTasks(topic: string): Promise<GeneratedTask[]> {
+  const result = await groqJSON<{ tasks?: Omit<GeneratedTask, 'id'>[] } | Omit<GeneratedTask, 'id'>[]>([
+    { role: 'system', content: 'You are a curriculum designer. Always return valid JSON.' },
+    {
+      role: 'user',
+      content: `Generate exactly 3 practical hands-on tasks for someone studying: "${topic}".
+
+Return a JSON object: {"tasks": [...]}
+Each task object must have:
+- "title": a concise task title (string)
+- "description": 2-3 sentences describing what to do (string)
+- "difficulty": exactly one of "Easy", "Medium", or "Hard" (string)
+
+Make task 1 Easy (~30 min), task 2 Medium (~1 hr), task 3 Hard (~2 hr).`,
+    },
+  ], 1024);
+  const raw = Array.isArray(result) ? result : ((result as { tasks?: Omit<GeneratedTask, 'id'>[] }).tasks ?? []);
+  return (raw as Omit<GeneratedTask, 'id'>[]).map((t, i) => ({
+    ...t,
+    id: `gen_${Date.now()}_${i}`,
+    difficulty: t.difficulty as GeneratedTask['difficulty'],
+  }));
+}
+
+export async function generateWeeklyProject(skill: string, topics: string[]): Promise<string> {
+  if (!topics.length) throw new Error('No topics this week yet — add some learning content first.');
+  return groqText([
+    { role: 'system', content: 'You are a curriculum designer who creates hands-on project assignments. Use Markdown formatting.' },
+    {
+      role: 'user',
+      content: [
+        `The learner is studying: "${skill}".`,
+        'Topics covered this week:',
+        ...topics.map(t => `- ${t}`),
+        '',
+        'Design ONE substantial weekly project that synthesises these topics.',
+        'Requirements: 2–4 hours of work, hands-on, produces a tangible artifact (small app, document, or design), clear acceptance criteria.',
+        'Format with these Markdown sections: ## Overview, ## Requirements (bulleted list), ## Stretch Goals, ## How to Submit.',
+        'Keep it under 400 words. Do not invent URLs.',
+      ].join('\n'),
+    },
+  ], 1024);
 }
 
 /**
