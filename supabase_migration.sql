@@ -49,3 +49,15 @@ DROP POLICY IF EXISTS "Users can manage their own daily tasks" ON public.daily_t
 -- Grant access to the anon role (same as weekly_assignments and other tables)
 GRANT ALL ON public.knowledge_checks TO anon, authenticated;
 GRANT ALL ON public.daily_tasks TO anon, authenticated;
+
+-- -------------------------------------------------------
+-- push_tokens  (FCM device tokens for daily reminders)
+-- -------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.push_tokens (
+  user_id    TEXT PRIMARY KEY,
+  token      TEXT NOT NULL,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE public.push_tokens DISABLE ROW LEVEL SECURITY;
+GRANT ALL ON public.push_tokens TO anon, authenticated;

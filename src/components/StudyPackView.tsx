@@ -1,4 +1,4 @@
-import React from 'react';
+import { DotLottieReact } from '@lottiefiles/dotlottie-react';
 import { BookOpen, Clock, Sparkles, RefreshCw, XCircle, FileText, Pencil } from 'lucide-react';
 import type { StudyPack } from '../types';
 
@@ -12,14 +12,13 @@ interface Props {
 
 export function StudyPackView({ pack, loading, error, onGenerate, onRegenerate }: Props) {
   if (loading) {
-    const DotLottie = 'dotlottie-wc' as unknown as React.ElementType;
     return (
       <div className="flex flex-col items-center justify-center py-10">
-        <DotLottie
+        <DotLottieReact
           src="https://lottie.host/032219e0-ead6-4de6-a8de-4913de4a83cb/3uDAtEKI3e.lottie"
           style={{ width: 200, height: 200 }}
-          autoplay="true"
-          loop="true"
+          autoplay
+          loop
         />
       </div>
     );

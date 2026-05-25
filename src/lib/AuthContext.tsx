@@ -11,6 +11,7 @@ import {
   updateProfile,
 } from 'firebase/auth';
 import { auth, isFirebaseConfigured } from './firebase';
+import { registerPushNotifications, unregisterPushNotifications } from './notifications';
 
 interface AuthContextValue {
   user: User | null;
@@ -38,6 +39,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return onAuthStateChanged(auth, (u) => {
       setUser(u);
       setLoading(false);
+      if (u) registerPushNotifications(u.uid);
     });
   }, []);
 
@@ -61,6 +63,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await sendPasswordResetEmail(auth, email.trim());
     },
     logout: async () => {
+      if (auth.currentUser) await unregisterPushNotifications(auth.currentUser.uid);
       await signOut(auth);
     },
     updateDisplayName: async (name: string) => {
