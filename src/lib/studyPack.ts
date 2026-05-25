@@ -1,8 +1,15 @@
 import { GoogleGenAI } from '@google/genai';
-import type { StudyPack, WeeklyAssignment, Schedule } from '../types';
+import type { StudyPack, WeeklyAssignment, Schedule, QuizQuestion } from '../types';
+
+export interface GeneratedTask {
+  id: string;
+  title: string;
+  description: string;
+  difficulty: 'Easy' | 'Medium' | 'Hard';
+}
 
 const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-const MODEL = 'gemini-2.0-flash-exp';
+const MODEL = 'gemini-2.0-flash-lite';
 
 const client: GoogleGenAI | null = apiKey ? new GoogleGenAI({ apiKey }) : null;
 
@@ -106,6 +113,84 @@ export async function generateStudyPack(docUrl: string, docTitle: string): Promi
     generatedAt: Date.now(),
     ...parsed,
   };
+}
+
+// ---- Topic quiz ------------------------------------------------------------
+
+export async function generateTopicQuiz(topic: string, count: number = 5): Promise<QuizQuestion[]> {
+  if (!client) throw new Error('AI is not configured. Add VITE_GEMINI_API_KEY to .env.local.');
+  const n = Math.max(1, Math.min(count, 10));
+  const prompt = `Generate ${n} multiple-choice quiz questions testing understanding of: "${topic}".
+Each question must have exactly 4 answer choices and one correct answer (0-indexed integer 0-3).
+Include a brief explanation (1-2 sentences) for the correct answer.
+Return JSON array only.`;
+
+  const res = await client.models.generateContent({
+    model: MODEL,
+    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    config: {
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            q: { type: 'string' },
+            choices: { type: 'array', items: { type: 'string' }, minItems: 4, maxItems: 4 },
+            answer: { type: 'number' },
+            explanation: { type: 'string' },
+          },
+          required: ['q', 'choices', 'answer', 'explanation'],
+        },
+      } as unknown as object,
+    },
+  });
+
+  const raw = res.text;
+  if (!raw) throw new Error('AI returned an empty response.');
+  let parsed: QuizQuestion[];
+  try { parsed = JSON.parse(raw); } catch { throw new Error('AI returned malformed JSON. Try again.'); }
+  return parsed.slice(0, n);
+}
+
+// ---- Daily task assignments ------------------------------------------------
+
+export async function generateDailyAssignments(topic: string): Promise<GeneratedTask[]> {
+  if (!client) throw new Error('AI is not configured. Add VITE_GEMINI_API_KEY to .env.local.');
+  const prompt = `Generate 3 practical hands-on tasks for a learner studying: "${topic}".
+- Task 1: Easy (30 min) — a simple exercise to build confidence
+- Task 2: Medium (1 hour) — apply the concept in a realistic scenario
+- Task 3: Hard (2 hours) — a challenging project-style problem
+Each task needs a concise title and a clear 2-3 sentence description of what to do.
+Return JSON array only.`;
+
+  const res = await client.models.generateContent({
+    model: MODEL,
+    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    config: {
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: 'array',
+        minItems: 3,
+        maxItems: 3,
+        items: {
+          type: 'object',
+          properties: {
+            title: { type: 'string' },
+            description: { type: 'string' },
+            difficulty: { type: 'string', enum: ['Easy', 'Medium', 'Hard'] },
+          },
+          required: ['title', 'description', 'difficulty'],
+        },
+      } as unknown as object,
+    },
+  });
+
+  const raw = res.text;
+  if (!raw) throw new Error('AI returned an empty response.');
+  let parsed: Omit<GeneratedTask, 'id'>[];
+  try { parsed = JSON.parse(raw); } catch { throw new Error('AI returned malformed JSON. Try again.'); }
+  return parsed.map((t, i) => ({ ...t, id: `gen_${Date.now()}_${i}`, difficulty: t.difficulty as GeneratedTask['difficulty'] }));
 }
 
 // ---- Weekly assignment -----------------------------------------------------

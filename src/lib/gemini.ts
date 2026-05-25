@@ -9,7 +9,7 @@ export const isGeminiConfigured = Boolean(apiKey);
 // documents the migration path.
 const client: GoogleGenAI | null = apiKey ? new GoogleGenAI({ apiKey }) : null;
 
-const MODEL = 'gemini-2.0-flash-exp';
+const MODEL = 'gemini-2.0-flash-lite';
 
 function systemInstruction(skill: string) {
   return [

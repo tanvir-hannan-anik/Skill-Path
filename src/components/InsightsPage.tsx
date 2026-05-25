@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import React, { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { MessageSquare, CalendarDays, Send, Bot, User, Maximize2, Minimize2, Loader2, Trash2, Trophy, Sparkles, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ChatMessage, Schedule, WeeklyAssignment } from '../types';
@@ -374,9 +374,7 @@ function WeeklyAssignmentPanel({ skill, schedule }: { skill: string; schedule: S
 
       {assignment && (
         <div className="bg-white border border-border-strong rounded-2xl p-5 sm:p-7">
-          <article className="prose prose-slate dark:prose-invert max-w-none prose-headings:font-display prose-headings:font-medium prose-h1:text-2xl prose-h2:text-lg prose-h3:text-base prose-strong:text-primary">
-            <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed bg-transparent p-0 m-0">{assignment.prompt}</pre>
-          </article>
+          <WeeklyProjectMarkdown text={assignment.prompt} />
           <p className="text-[10px] font-bold uppercase tracking-widest text-text-muted mt-5">
             Generated {new Date(assignment.generatedAt).toLocaleString()}
           </p>
@@ -384,6 +382,50 @@ function WeeklyAssignmentPanel({ skill, schedule }: { skill: string; schedule: S
       )}
     </div>
   );
+}
+
+/** Renders the weekly project markdown: headings, bullets, bold, paragraphs. */
+function WeeklyProjectMarkdown({ text }: { text: string }) {
+  const lines = text.split('\n');
+  const elements: React.ReactNode[] = [];
+  let key = 0;
+
+  function renderInline(line: string): React.ReactNode {
+    const parts = line.split(/(\*\*[^*]+\*\*)/g);
+    return parts.map((part, i) =>
+      part.startsWith('**') && part.endsWith('**')
+        ? <strong key={i} className="font-semibold text-primary">{part.slice(2, -2)}</strong>
+        : <span key={i}>{part}</span>
+    );
+  }
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (/^#{1,3}\s/.test(line)) {
+      const level = line.match(/^(#+)/)?.[1].length ?? 1;
+      const content = line.replace(/^#+\s/, '');
+      const cls = level === 1
+        ? 'font-display font-semibold text-xl text-primary mt-6 mb-2'
+        : level === 2
+        ? 'font-display font-semibold text-base text-primary mt-5 mb-1.5'
+        : 'font-semibold text-sm text-primary mt-4 mb-1';
+      elements.push(<p key={key++} className={cls}>{content}</p>);
+    } else if (/^[-*]\s/.test(line)) {
+      const content = line.replace(/^[-*]\s/, '');
+      elements.push(
+        <div key={key++} className="flex items-start gap-2 text-sm text-text-secondary leading-relaxed">
+          <span className="w-1.5 h-1.5 rounded-full bg-primary/40 mt-2 shrink-0" />
+          <span>{renderInline(content)}</span>
+        </div>
+      );
+    } else if (line.trim() === '') {
+      elements.push(<div key={key++} className="h-2" />);
+    } else {
+      elements.push(<p key={key++} className="text-sm text-text-secondary leading-relaxed">{renderInline(line)}</p>);
+    }
+  }
+
+  return <div className="space-y-1">{elements}</div>;
 }
 
 /** Renders AI message text: **bold** → <strong>, newlines preserved, no raw markdown symbols shown. */
