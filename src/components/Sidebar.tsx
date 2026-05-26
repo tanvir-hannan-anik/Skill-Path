@@ -1,4 +1,4 @@
-import { Home, Compass, CheckSquare, Calendar as CalendarIcon, Lightbulb, LogIn, Map, Flame } from 'lucide-react';
+import { Home, Compass, CheckSquare, Calendar as CalendarIcon, Lightbulb, LogIn, Map, Flame, MessageCircle, BookOpen } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
 import { WorkspaceSwitcher } from './WorkspaceSwitcher';
 import { ReactNode, useMemo } from 'react';
@@ -28,6 +28,11 @@ const NAV_ITEMS: { id: NavItem; label: string; icon: ReactNode }[] = [
   { id: 'tasks', label: 'Tasks', icon: <CheckSquare className="w-[18px] h-[18px]" /> },
   { id: 'calendar', label: 'Calendar', icon: <CalendarIcon className="w-[18px] h-[18px]" /> },
   { id: 'insights', label: 'Insights', icon: <Lightbulb className="w-[18px] h-[18px]" /> },
+];
+
+const SOFT_SKILLS_ITEMS: { id: NavItem; label: string; icon: ReactNode }[] = [
+  { id: 'communication', label: 'Communication', icon: <MessageCircle className="w-[18px] h-[18px]" /> },
+  { id: 'vocabulary', label: 'English Vocabulary', icon: <BookOpen className="w-[18px] h-[18px]" /> },
 ];
 
 export function Sidebar({
@@ -93,6 +98,34 @@ export function Sidebar({
             </button>
           );
         })}
+
+        {/* Soft Skills section */}
+        <div className="pt-3 mt-1">
+          <div className="text-[10px] font-bold text-text-muted uppercase tracking-widest mb-2 px-1">Soft Skills</div>
+          {SOFT_SKILLS_ITEMS.map((item) => {
+            const isActive = activeTab === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => onChangeTab(item.id)}
+                aria-current={isActive ? 'page' : undefined}
+                className="w-full flex items-center gap-4 px-4 py-3.5 rounded-[16px] text-sm font-medium transition-colors relative group outline-none focus-visible:ring-2 focus-visible:ring-primary/30 mb-1.5"
+              >
+                {isActive && (
+                  <motion.div
+                    layoutId="navIndicator"
+                    className="absolute inset-0 bg-white border border-border-strong rounded-[16px] shadow-sm z-0"
+                    transition={{ type: 'spring', bounce: 0.15, duration: 0.5 }}
+                  />
+                )}
+                <div className={`relative z-10 flex items-center gap-4 ${isActive ? 'text-primary' : 'text-text-secondary group-hover:text-primary'}`}>
+                  {item.icon}
+                  {item.label}
+                </div>
+              </button>
+            );
+          })}
+        </div>
       </nav>
 
       {/* This Week mini calendar */}

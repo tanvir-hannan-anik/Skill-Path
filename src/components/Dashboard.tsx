@@ -17,6 +17,8 @@ import { toDateKey } from '../lib/dates';
 const InsightsPage = lazy(() => import('./InsightsPage').then(m => ({ default: m.InsightsPage })));
 const CalendarView = lazy(() => import('./CalendarView').then(m => ({ default: m.CalendarView })));
 const PlanPage = lazy(() => import('./PlanPage').then(m => ({ default: m.PlanPage })));
+const CommunicationPage = lazy(() => import('./CommunicationPage').then(m => ({ default: m.CommunicationPage })));
+const VocabularyPage = lazy(() => import('./VocabularyPage').then(m => ({ default: m.VocabularyPage })));
 
 interface Props {
   onRequestAuth: () => void;
@@ -232,6 +234,18 @@ export function Dashboard({ onRequestAuth }: Props) {
               {activeTab === 'insights' && (
                 <Suspense fallback={<FullPageLoader label="Loading insights…" />}>
                   <InsightsPage skill={activeWorkspace?.name ?? ''} schedule={schedule} />
+                </Suspense>
+              )}
+
+              {activeTab === 'communication' && (
+                <Suspense fallback={<FullPageLoader label="Loading Communication…" />}>
+                  <CommunicationPage />
+                </Suspense>
+              )}
+
+              {activeTab === 'vocabulary' && (
+                <Suspense fallback={<FullPageLoader label="Loading Vocabulary…" />}>
+                  <VocabularyPage />
                 </Suspense>
               )}
 

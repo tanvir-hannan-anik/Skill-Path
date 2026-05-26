@@ -1,4 +1,4 @@
-export type NavItem = 'dashboard' | 'learn' | 'plan' | 'tasks' | 'calendar' | 'insights' | 'profile';
+export type NavItem = 'dashboard' | 'learn' | 'plan' | 'tasks' | 'calendar' | 'insights' | 'profile' | 'communication' | 'vocabulary';
 
 export interface Workspace {
   id: string;

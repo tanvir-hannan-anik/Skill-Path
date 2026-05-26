@@ -97,3 +97,40 @@ create table if not exists weekly_assignments (
 alter table weekly_assignments enable row level security;
 create policy "Users manage own weekly assignments"
   on weekly_assignments for all using (user_id = current_setting('request.jwt.claims', true)::json->>'sub');
+
+-- ---- Soft Skills: Daily Stories (one per date, shared across users) ----------
+create table if not exists soft_skill_stories (
+  date          text primary key,          -- YYYY-MM-DD
+  title         text not null,
+  story_text    text not null,
+  created_at    timestamptz default now()
+);
+alter table soft_skill_stories enable row level security;
+create policy "Public read soft skill stories"
+  on soft_skill_stories for select using (true);
+create policy "Public insert/update soft skill stories"
+  on soft_skill_stories for all with check (true);
+
+-- ---- Soft Skills: Daily Vocabulary Words (one set per date, shared) ----------
+create table if not exists soft_skill_vocab_words (
+  date          text primary key,          -- YYYY-MM-DD
+  words         jsonb not null default '[]',
+  created_at    timestamptz default now()
+);
+alter table soft_skill_vocab_words enable row level security;
+create policy "Public read vocab words"
+  on soft_skill_vocab_words for select using (true);
+create policy "Public insert/update vocab words"
+  on soft_skill_vocab_words for all with check (true);
+
+-- ---- Soft Skills: User Vocab Sentences (per user, per date) -----------------
+create table if not exists soft_skill_vocab_sentences (
+  user_id       text not null,
+  date          text not null,             -- YYYY-MM-DD
+  sentences     jsonb not null default '{}', -- Record<wordIndex, sentence>
+  updated_at    timestamptz default now(),
+  primary key (user_id, date)
+);
+alter table soft_skill_vocab_sentences enable row level security;
+create policy "Users manage own vocab sentences"
+  on soft_skill_vocab_sentences for all using (true) with check (true);
