@@ -216,6 +216,26 @@ export function setGuestSchedule(schedule: Schedule) {
   writeJSON(K_SCHEDULE, schedule);
 }
 
+// ---- Chat daily usage limit ------------------------------------------------
+
+const chatDailyKey = (userKey: string, date: string) =>
+  `skillpath:chat:daily:${date}:${userKey}`;
+
+function todayDateStr(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+export function getChatDailyUsage(userKey: string): number {
+  return readJSON<number>(chatDailyKey(userKey, todayDateStr()), 0);
+}
+
+export function incrementChatDailyUsage(userKey: string): number {
+  const key = chatDailyKey(userKey, todayDateStr());
+  const next = readJSON<number>(key, 0) + 1;
+  writeJSON(key, next);
+  return next;
+}
+
 // ---- Clear all -------------------------------------------------------------
 
 export function clearGuestData() {

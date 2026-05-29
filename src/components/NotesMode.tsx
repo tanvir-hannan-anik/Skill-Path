@@ -9,6 +9,16 @@ interface Props {
 }
 
 const DRIVE_API_KEY = import.meta.env.VITE_GOOGLE_DRIVE_API_KEY as string | undefined;
+const DRIVE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
+
+declare global {
+  interface Window {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    gapi: any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    google: any;
+  }
+}
 
 function extractDriveId(url: string): string | null {
   const patterns = [
@@ -46,11 +56,68 @@ function genId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
 }
 
+function loadScript(src: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (document.querySelector(`script[src="${src}"]`)) { resolve(); return; }
+    const s = document.createElement('script');
+    s.src = src;
+    s.onload = () => resolve();
+    s.onerror = reject;
+    document.head.appendChild(s);
+  });
+}
+
+async function getOAuthToken(): Promise<string> {
+  await loadScript('https://accounts.google.com/gsi/client');
+  return new Promise((resolve, reject) => {
+    const client = window.google.accounts.oauth2.initTokenClient({
+      client_id: DRIVE_CLIENT_ID,
+      scope: 'https://www.googleapis.com/auth/drive.readonly',
+      callback: (resp: { error?: string; access_token: string }) => {
+        if (resp.error) reject(new Error(resp.error));
+        else resolve(resp.access_token);
+      },
+    });
+    client.requestAccessToken({ prompt: '' });
+  });
+}
+
+async function openDrivePicker(
+  onPicked: (url: string, name: string) => void,
+  onError: (msg: string) => void
+) {
+  try {
+    await loadScript('https://apis.google.com/js/api.js');
+    await new Promise<void>((res) => window.gapi.load('picker', res));
+    const token = await getOAuthToken();
+
+    const picker = new window.google.picker.PickerBuilder()
+      .addView(new window.google.picker.DocsView().setIncludeFolders(true))
+      .setOAuthToken(token)
+      .setDeveloperKey(DRIVE_API_KEY)
+      .setCallback((data: { action: string; docs?: Array<{ id: string; name: string; url: string }> }) => {
+        if (data.action === window.google.picker.Action.PICKED && data.docs?.[0]) {
+          const doc = data.docs[0];
+          const url = doc.url || `https://drive.google.com/file/d/${doc.id}/view?usp=sharing`;
+          onPicked(url, doc.name ?? '');
+        }
+      })
+      .build();
+    picker.setVisible(true);
+  } catch (err) {
+    console.error('Drive picker error:', err);
+    onError('Could not open Google Drive picker. Make sure popups are allowed and try again.');
+  }
+}
+
 export function NotesMode({ notes, onAddNote, onRemoveNote }: Props) {
   const [title, setTitle] = useState('');
   const [url, setUrl] = useState('');
   const [fetching, setFetching] = useState(false);
+  const [pickerLoading, setPickerLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const pickerAvailable = !!(DRIVE_API_KEY && DRIVE_CLIENT_ID);
 
   const handleUrlBlur = async () => {
     if (!url.trim() || title.trim()) return;
@@ -60,8 +127,24 @@ export function NotesMode({ notes, onAddNote, onRemoveNote }: Props) {
     setFetching(false);
   };
 
-  const handleBrowse = () => {
-    window.open('https://drive.google.com', '_blank', 'noopener,noreferrer');
+  const handleBrowse = async () => {
+    if (!pickerAvailable) {
+      window.open('https://drive.google.com', '_blank', 'noopener,noreferrer');
+      return;
+    }
+    setPickerLoading(true);
+    setError(null);
+    await openDrivePicker(
+      (pickedUrl, pickedName) => {
+        setUrl(pickedUrl);
+        if (pickedName) setTitle(pickedName);
+        setPickerLoading(false);
+      },
+      (msg) => {
+        setError(msg);
+        setPickerLoading(false);
+      }
+    );
   };
 
   const handleAdd = () => {
@@ -85,15 +168,25 @@ export function NotesMode({ notes, onAddNote, onRemoveNote }: Props) {
           Files must be shared as "Anyone with the link can view" on Google Drive.
         </div>
 
+        {/* Browse button — opens Google Drive Picker if configured, else opens Drive in a tab */}
         <button
           onClick={handleBrowse}
-          className="w-full flex items-center justify-center gap-2 py-3 border-2 border-dashed border-violet-300 bg-violet-50 text-violet-700 rounded-xl text-sm font-medium hover:border-violet-400 hover:bg-violet-100 transition-all"
+          disabled={pickerLoading}
+          className="w-full flex items-center justify-center gap-2 py-3 border-2 border-dashed border-violet-300 bg-violet-50 text-violet-700 rounded-xl text-sm font-medium hover:border-violet-400 hover:bg-violet-100 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
         >
-          <FolderOpen className="w-4 h-4" />
-          Open Google Drive to browse &amp; copy link
+          {pickerLoading
+            ? <Loader2 className="w-4 h-4 animate-spin" />
+            : <FolderOpen className="w-4 h-4" />}
+          {pickerLoading
+            ? 'Opening Google Drive…'
+            : pickerAvailable
+            ? 'Browse Google Drive'
+            : 'Open Google Drive to browse & copy link'}
         </button>
 
+        {/* Manual URL section */}
         <div className="space-y-2">
+          <p className="text-[11px] font-bold uppercase tracking-widest text-text-muted">Or paste a link manually</p>
           <div className="relative">
             <input
               value={url}
@@ -165,7 +258,7 @@ export function NotesMode({ notes, onAddNote, onRemoveNote }: Props) {
         <div className="bg-canvas border border-dashed border-border-strong rounded-2xl p-10 text-center">
           <StickyNote className="w-10 h-10 text-text-muted mx-auto mb-4" />
           <p className="text-text-secondary text-sm">No notes for today yet.</p>
-          <p className="text-text-muted text-xs mt-1">Open Google Drive above and paste a share link.</p>
+          <p className="text-text-muted text-xs mt-1">Browse Google Drive above or paste a share link.</p>
         </div>
       )}
     </div>

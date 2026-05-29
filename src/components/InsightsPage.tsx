@@ -1,11 +1,11 @@
 import React, { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { MessageSquare, CalendarDays, Send, Bot, User, Maximize2, Minimize2, Loader2, Trash2, Trophy, Sparkles, RefreshCw } from 'lucide-react';
+import { MessageSquare, CalendarDays, Send, Bot, User, Maximize2, Minimize2, Loader2, Trash2, Trophy, Sparkles, RefreshCw, Lock } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ChatMessage, Schedule, WeeklyAssignment } from '../types';
 import { useAuth } from '../lib/AuthContext';
 import { useToast } from '../lib/toast';
 import { appendChatMessage, clearChat, subscribeToChat, getWeeklyAssignment, saveWeeklyAssignment } from '../lib/firestore';
-import { appendGuestChat, clearGuestChat, getGuestChat, getGuestWeeklyAssignment, setGuestWeeklyAssignment } from '../lib/localStore';
+import { appendGuestChat, clearGuestChat, getGuestChat, getGuestWeeklyAssignment, setGuestWeeklyAssignment, getChatDailyUsage, incrementChatDailyUsage } from '../lib/localStore';
 import { isGroqConfigured, streamGroqReply } from '../lib/groq';
 import { extractWeekTopics, generateWeeklyAssignment, isoWeekDates, isoWeekKey } from '../lib/studyPack';
 import { parseDateKey, toDateKey } from '../lib/dates';
@@ -24,6 +24,8 @@ const WELCOME: ChatMessage = {
     "Hello! I'm your SkillPath AI tutor. Ask me to plan today's study session, explain a concept, or break down a tricky task — I'll tailor everything to what you're currently learning.",
 };
 
+const DAILY_MSG_LIMIT = 3;
+
 export function InsightsPage({ skill, schedule }: Props) {
   const { user } = useAuth();
   const toast = useToast();
@@ -36,6 +38,10 @@ export function InsightsPage({ skill, schedule }: Props) {
   const [streamingText, setStreamingText] = useState('');
   const [inputMessage, setInputMessage] = useState('');
   const [sending, setSending] = useState(false);
+
+  const userKey = user?.uid ?? 'guest';
+  const [dailyUsed, setDailyUsed] = useState(() => getChatDailyUsage(userKey));
+  const limitReached = dailyUsed >= DAILY_MSG_LIMIT;
 
   // Subscribe to chat history. Signed-in users get Firestore realtime; guests
   // read from localStorage.
@@ -84,6 +90,7 @@ export function InsightsPage({ skill, schedule }: Props) {
       toast.error('AI is not configured — add VITE_GROQ_API_KEY to your .env.local.');
       return;
     }
+    if (limitReached) return;
 
     setInputMessage('');
     setSending(true);
@@ -98,6 +105,9 @@ export function InsightsPage({ skill, schedule }: Props) {
         const m = appendGuestChat('user', text);
         setMessages((prev) => [...prev, m]);
       }
+
+      const newCount = incrementChatDailyUsage(userKey);
+      setDailyUsed(newCount);
 
       let assembled = '';
       await streamGroqReply({
@@ -229,6 +239,17 @@ export function InsightsPage({ skill, schedule }: Props) {
                     </span>
                   </div>
                 </div>
+                <div className="flex items-center gap-2 mr-2">
+                  <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${
+                    limitReached
+                      ? 'bg-red-50 border-red-200 text-red-600'
+                      : dailyUsed === DAILY_MSG_LIMIT - 1
+                      ? 'bg-amber-50 border-amber-200 text-amber-700'
+                      : 'bg-canvas border-border-strong text-text-muted'
+                  }`}>
+                    {dailyUsed}/{DAILY_MSG_LIMIT} today
+                  </span>
+                </div>
                 <div className="flex items-center gap-2">
                   {messages.length > 0 && (
                     <button
@@ -265,25 +286,34 @@ export function InsightsPage({ skill, schedule }: Props) {
               </div>
 
               <div className="p-3 sm:p-4 md:p-6 bg-surface border-t border-border-strong">
-                <form onSubmit={handleSendMessage} className="relative max-w-3xl mx-auto">
-                  <input
-                    type="text"
-                    value={inputMessage}
-                    onChange={(e) => setInputMessage(e.target.value)}
-                    placeholder={isGroqConfigured ? 'Ask anything about your learning…' : 'Add VITE_GROQ_API_KEY to enable chat'}
-                    disabled={!isGroqConfigured || sending}
-                    className="w-full bg-white border border-border-strong outline-none focus:border-primary rounded-full pl-5 sm:pl-6 pr-14 py-3 sm:py-4 text-sm shadow-sm transition-colors text-primary disabled:opacity-60"
-                    aria-label="Message AI assistant"
-                  />
-                  <button
-                    type="submit"
-                    disabled={!inputMessage.trim() || sending || !isGroqConfigured}
-                    aria-label="Send message"
-                    className="absolute right-2 top-1/2 -translate-y-1/2 h-10 w-10 sm:h-12 sm:w-12 bg-primary text-white flex items-center justify-center rounded-full hover:bg-primary/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                  </button>
-                </form>
+                {limitReached ? (
+                  <div className="max-w-3xl mx-auto flex items-center gap-3 px-5 py-4 bg-red-50 border border-red-200 rounded-2xl text-sm text-red-700">
+                    <Lock className="w-4 h-4 shrink-0 text-red-500" />
+                    <span>
+                      <strong>You've reached your free daily limit.</strong> You can send {DAILY_MSG_LIMIT} messages per day — this resets every day at midnight.
+                    </span>
+                  </div>
+                ) : (
+                  <form onSubmit={handleSendMessage} className="relative max-w-3xl mx-auto">
+                    <input
+                      type="text"
+                      value={inputMessage}
+                      onChange={(e) => setInputMessage(e.target.value)}
+                      placeholder={isGroqConfigured ? 'Ask anything about your learning…' : 'Add VITE_GROQ_API_KEY to enable chat'}
+                      disabled={!isGroqConfigured || sending}
+                      className="w-full bg-white border border-border-strong outline-none focus:border-primary rounded-full pl-5 sm:pl-6 pr-14 py-3 sm:py-4 text-sm shadow-sm transition-colors text-primary disabled:opacity-60"
+                      aria-label="Message AI assistant"
+                    />
+                    <button
+                      type="submit"
+                      disabled={!inputMessage.trim() || sending || !isGroqConfigured}
+                      aria-label="Send message"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 h-10 w-10 sm:h-12 sm:w-12 bg-primary text-white flex items-center justify-center rounded-full hover:bg-primary/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                    </button>
+                  </form>
+                )}
               </div>
             </motion.div>
           )}
