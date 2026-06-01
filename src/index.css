@@ -109,6 +109,7 @@
 .dark .border-violet-300 { border-color: rgb(76 29 149 / 0.6); }
 .dark .text-violet-800 { color: #c4b5fd; }
 .dark .text-violet-700 { color: #c4b5fd; }
+.dark .hover\:bg-violet-50:hover { background-color: rgb(76 29 149 / 0.25); }
 .dark .hover\:bg-violet-100:hover { background-color: rgb(76 29 149 / 0.4); }
 .dark .hover\:border-violet-400:hover { border-color: rgb(76 29 149 / 0.7); }
 
