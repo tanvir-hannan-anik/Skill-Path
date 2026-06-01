@@ -43,6 +43,7 @@ export interface NotePlan {
   id: string;
   title: string;
   driveUrl: string;
+  localFile?: boolean;
 }
 
 export interface Task {

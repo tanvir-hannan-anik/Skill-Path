@@ -1,8 +1,8 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Plus, Play, FileText, HelpCircle, ClipboardList, StickyNote,
   ChevronLeft, ChevronRight, X, Clock, ExternalLink, Trash2,
-  AlertCircle, FolderOpen, Search, Loader2,
+  AlertCircle, FolderOpen, Search, Loader2, Upload, Download,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Schedule, DayContent, Resource, QuizPlan, AssignmentPlan, NotePlan, YouTubeResult } from '../types';
@@ -355,10 +355,23 @@ interface NoteFormProps {
   onSubmit: (note: NotePlan) => void;
 }
 
+const LOCAL_FILE_MAX_BYTES = 10 * 1024 * 1024; // 10 MB
+
 function NoteForm({ onSubmit }: NoteFormProps) {
+  const [tab, setTab] = useState<'drive' | 'local'>('drive');
+
+  // Drive state
   const [noteTitle, setNoteTitle] = useState('');
   const [noteUrl, setNoteUrl] = useState('');
   const [fetching, setFetching] = useState(false);
+
+  // Local file state
+  const [localFile, setLocalFile] = useState<File | null>(null);
+  const [localTitle, setLocalTitle] = useState('');
+  const [localError, setLocalError] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const handleUrlBlur = async () => {
     if (!noteUrl.trim() || noteTitle.trim()) return;
@@ -372,44 +385,162 @@ function NoteForm({ onSubmit }: NoteFormProps) {
     window.open('https://drive.google.com', '_blank', 'noopener,noreferrer');
   };
 
-  const handleSubmit = () => {
+  const handleDriveSubmit = () => {
     if (!noteUrl.trim() || !noteTitle.trim()) return;
     onSubmit({ id: genId(), title: noteTitle.trim(), driveUrl: noteUrl.trim() });
   };
 
+  const acceptFile = (file: File) => {
+    setLocalError(null);
+    if (file.size > LOCAL_FILE_MAX_BYTES) {
+      setLocalError(`File is too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Maximum is 10 MB.`);
+      return;
+    }
+    setLocalFile(file);
+    setLocalTitle(prev => prev || file.name.replace(/\.[^.]+$/, ''));
+  };
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) acceptFile(file);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) acceptFile(file);
+  };
+
+  const handleLocalSubmit = async () => {
+    if (!localFile || !localTitle.trim()) return;
+    setUploading(true);
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => reject(new Error('Failed to read file'));
+        reader.readAsDataURL(localFile);
+      });
+      onSubmit({ id: genId(), title: localTitle.trim(), driveUrl: dataUrl, localFile: true });
+    } catch {
+      setLocalError('Failed to read the file. Please try again.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
-      <div className="flex items-start gap-2 p-3 bg-violet-50 border border-violet-200 rounded-xl text-xs text-violet-700">
-        <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-        Make sure the file is shared as "Anyone with the link can view."
-      </div>
-
-      <div>
-        <label className="block text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">Google Drive file or folder</label>
-        <button onClick={handleBrowse}
-          className="w-full flex items-center justify-center gap-2 py-2.5 border-2 border-dashed border-violet-300 bg-violet-50 text-violet-700 rounded-xl text-sm font-medium hover:border-violet-400 hover:bg-violet-100 transition-all mb-3">
-          <FolderOpen className="w-4 h-4" />
-          Open Google Drive to browse
+      {/* Tab toggle */}
+      <div className="flex bg-canvas border border-border-strong rounded-xl p-1 gap-1">
+        <button onClick={() => setTab('drive')}
+          className={`flex-1 py-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${tab === 'drive' ? 'bg-white text-primary shadow-sm border border-border-strong' : 'text-text-muted hover:text-primary'}`}>
+          <FolderOpen className="w-3 h-3" /> Google Drive
         </button>
-        <div className="relative">
-          <input value={noteUrl} onChange={e => setNoteUrl(e.target.value)} onBlur={handleUrlBlur}
-            placeholder="Paste Drive link here…"
-            className="w-full border border-border-strong rounded-xl px-4 py-2.5 text-sm outline-none focus:border-primary bg-canvas placeholder:text-text-muted/60 pr-10" />
-          {fetching && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted animate-spin" />}
-        </div>
+        <button onClick={() => setTab('local')}
+          className={`flex-1 py-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${tab === 'local' ? 'bg-white text-primary shadow-sm border border-border-strong' : 'text-text-muted hover:text-primary'}`}>
+          <Upload className="w-3 h-3" /> Local File
+        </button>
       </div>
 
-      <div>
-        <label className="block text-xs font-semibold text-text-muted uppercase tracking-wider mb-1.5">Title</label>
-        <input autoFocus={false} value={noteTitle} onChange={e => setNoteTitle(e.target.value)}
-          placeholder={fetching ? 'Fetching title…' : 'Note title…'}
-          className="w-full border border-border-strong rounded-xl px-4 py-2.5 text-sm outline-none focus:border-primary bg-canvas placeholder:text-text-muted/60" />
-      </div>
+      {tab === 'drive' && (
+        <>
+          <div className="flex items-start gap-2 p-3 bg-violet-50 border border-violet-200 rounded-xl text-xs text-violet-700">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+            Make sure the file is shared as "Anyone with the link can view."
+          </div>
 
-      <button onClick={handleSubmit} disabled={!noteUrl.trim() || !noteTitle.trim()}
-        className="w-full py-3 bg-primary text-white font-semibold text-sm rounded-2xl hover:bg-primary/90 active:scale-[0.98] transition-all shadow-md shadow-primary/20 disabled:opacity-40 disabled:cursor-not-allowed">
-        Add note to plan
-      </button>
+          <div>
+            <label className="block text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">Google Drive file or folder</label>
+            <button onClick={handleBrowse}
+              className="w-full flex items-center justify-center gap-2 py-2.5 border-2 border-dashed border-violet-300 bg-violet-50 text-violet-700 rounded-xl text-sm font-medium hover:border-violet-400 hover:bg-violet-100 transition-all mb-3">
+              <FolderOpen className="w-4 h-4" />
+              Open Google Drive to browse
+            </button>
+            <div className="relative">
+              <input value={noteUrl} onChange={e => setNoteUrl(e.target.value)} onBlur={handleUrlBlur}
+                placeholder="Paste Drive link here…"
+                className="w-full border border-border-strong rounded-xl px-4 py-2.5 text-sm outline-none focus:border-primary bg-canvas placeholder:text-text-muted/60 pr-10" />
+              {fetching && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted animate-spin" />}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-text-muted uppercase tracking-wider mb-1.5">Title</label>
+            <input autoFocus={false} value={noteTitle} onChange={e => setNoteTitle(e.target.value)}
+              placeholder={fetching ? 'Fetching title…' : 'Note title…'}
+              className="w-full border border-border-strong rounded-xl px-4 py-2.5 text-sm outline-none focus:border-primary bg-canvas placeholder:text-text-muted/60" />
+          </div>
+
+          <button onClick={handleDriveSubmit} disabled={!noteUrl.trim() || !noteTitle.trim()}
+            className="w-full py-3 bg-primary text-white font-semibold text-sm rounded-2xl hover:bg-primary/90 active:scale-[0.98] transition-all shadow-md shadow-primary/20 disabled:opacity-40 disabled:cursor-not-allowed">
+            Add note to plan
+          </button>
+        </>
+      )}
+
+      {tab === 'local' && (
+        <>
+          <div className="flex items-start gap-2 p-3 bg-violet-50 border border-violet-200 rounded-xl text-xs text-violet-700">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+            Files up to 10 MB are supported. The file is stored in your plan data.
+          </div>
+
+          {/* Drop zone */}
+          <div
+            onDragOver={e => { e.preventDefault(); setDragging(true); }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={handleDrop}
+            className={`relative border-2 border-dashed rounded-xl transition-all ${dragging ? 'border-violet-400 bg-violet-50' : localFile ? 'border-emerald-300 bg-emerald-50' : 'border-border-strong bg-canvas hover:border-violet-300 hover:bg-violet-50'}`}
+          >
+            <input
+              ref={fileInputRef}
+              type="file"
+              onChange={handleFileInputChange}
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+              accept=".pdf,.txt,.md,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.png,.jpg,.jpeg,.gif,.csv"
+            />
+            <div className="flex flex-col items-center justify-center gap-2 py-6 px-4 pointer-events-none">
+              {localFile ? (
+                <>
+                  <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center">
+                    <FileText className="w-5 h-5 text-emerald-600" />
+                  </div>
+                  <p className="text-sm font-semibold text-primary text-center truncate max-w-full">{localFile.name}</p>
+                  <p className="text-xs text-text-muted">{(localFile.size / 1024).toFixed(0)} KB · click to change</p>
+                </>
+              ) : (
+                <>
+                  <div className="w-10 h-10 rounded-xl bg-violet-50 border border-violet-200 flex items-center justify-center">
+                    <Upload className="w-5 h-5 text-violet-500" />
+                  </div>
+                  <p className="text-sm font-medium text-primary">Drop a file here or click to browse</p>
+                  <p className="text-xs text-text-muted">PDF, Word, PowerPoint, Markdown, images…</p>
+                </>
+              )}
+            </div>
+          </div>
+
+          {localError && (
+            <p className="text-xs text-red-500 flex items-center gap-1.5">
+              <AlertCircle className="w-3.5 h-3.5 shrink-0" />{localError}
+            </p>
+          )}
+
+          <div>
+            <label className="block text-xs font-semibold text-text-muted uppercase tracking-wider mb-1.5">Title</label>
+            <input value={localTitle} onChange={e => setLocalTitle(e.target.value)}
+              placeholder="Note title…"
+              className="w-full border border-border-strong rounded-xl px-4 py-2.5 text-sm outline-none focus:border-primary bg-canvas placeholder:text-text-muted/60" />
+          </div>
+
+          <button onClick={handleLocalSubmit} disabled={!localFile || !localTitle.trim() || uploading}
+            className="w-full py-3 bg-primary text-white font-semibold text-sm rounded-2xl hover:bg-primary/90 active:scale-[0.98] transition-all shadow-md shadow-primary/20 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+            {uploading ? <><Loader2 className="w-4 h-4 animate-spin" /> Reading file…</> : 'Add note to plan'}
+          </button>
+        </>
+      )}
     </div>
   );
 }
@@ -646,8 +777,15 @@ function NoteChip({ item, onRemove }: { item: NotePlan; onRemove: () => void }) 
   return (
     <div className="flex items-center gap-2 bg-violet-50 border border-violet-200 rounded-xl px-3 py-2 group">
       <div className="w-6 h-6 rounded-lg bg-violet-100 flex items-center justify-center shrink-0"><StickyNote className="w-3 h-3 text-violet-600" /></div>
-      <p className="text-xs font-semibold text-violet-800 flex-1 truncate">{item.title}</p>
-      <a href={item.driveUrl} target="_blank" rel="noopener noreferrer" className="text-violet-400 hover:text-violet-600 shrink-0"><ExternalLink className="w-3 h-3" /></a>
+      <div className="flex-1 min-w-0">
+        <p className="text-xs font-semibold text-violet-800 truncate">{item.title}</p>
+        {item.localFile && <p className="text-[10px] text-violet-500">Local file</p>}
+      </div>
+      {item.localFile ? (
+        <a href={item.driveUrl} download={item.title} className="text-violet-400 hover:text-violet-600 shrink-0"><Download className="w-3 h-3" /></a>
+      ) : (
+        <a href={item.driveUrl} target="_blank" rel="noopener noreferrer" className="text-violet-400 hover:text-violet-600 shrink-0"><ExternalLink className="w-3 h-3" /></a>
+      )}
       <button onClick={onRemove} className="text-violet-300 hover:text-violet-500 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 className="w-3 h-3" /></button>
     </div>
   );
