@@ -7,6 +7,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { Schedule, DayContent, Resource, QuizPlan, AssignmentPlan, NotePlan, YouTubeResult } from '../types';
 import { NoteViewerModal } from './NoteViewerModal';
+import { convertPptxToPdf } from '../lib/pptxToPdf';
 import { toDateKey } from '../lib/dates';
 import { searchYouTube, isYouTubeConfigured, videoIdToUrl, formatDuration } from '../lib/youtube';
 import { SEARCH_PROVIDERS } from '../lib/search';
@@ -413,19 +414,26 @@ function NoteForm({ onSubmit }: NoteFormProps) {
     if (file) acceptFile(file);
   };
 
+  const isPptx = localFile?.name.toLowerCase().endsWith('.pptx') ?? false;
+
   const handleLocalSubmit = async () => {
     if (!localFile || !localTitle.trim()) return;
     setUploading(true);
     try {
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = () => reject(new Error('Failed to read file'));
-        reader.readAsDataURL(localFile);
-      });
+      let dataUrl: string;
+      if (isPptx) {
+        dataUrl = await convertPptxToPdf(localFile);
+      } else {
+        dataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = () => reject(new Error('Failed to read file'));
+          reader.readAsDataURL(localFile);
+        });
+      }
       onSubmit({ id: genId(), title: localTitle.trim(), driveUrl: dataUrl, localFile: true });
     } catch {
-      setLocalError('Failed to read the file. Please try again.');
+      setLocalError(isPptx ? 'Failed to convert PPTX to PDF. Please try again.' : 'Failed to read the file. Please try again.');
     } finally {
       setUploading(false);
     }
@@ -538,7 +546,7 @@ function NoteForm({ onSubmit }: NoteFormProps) {
 
           <button onClick={handleLocalSubmit} disabled={!localFile || !localTitle.trim() || uploading}
             className="w-full py-3 bg-primary text-white font-semibold text-sm rounded-2xl hover:bg-primary/90 active:scale-[0.98] transition-all shadow-md shadow-primary/20 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2">
-            {uploading ? <><Loader2 className="w-4 h-4 animate-spin" /> Reading file…</> : 'Add note to plan'}
+            {uploading ? <><Loader2 className="w-4 h-4 animate-spin" /> {isPptx ? 'Converting PPTX to PDF…' : 'Reading file…'}</> : 'Add note to plan'}
           </button>
         </>
       )}

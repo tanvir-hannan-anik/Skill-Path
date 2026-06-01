@@ -1,4 +1,5 @@
-import { X, Download, FileText } from 'lucide-react';
+import { useRef, useState, useEffect } from 'react';
+import { X, Download, FileText, Maximize2, Minimize2 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { NotePlan } from '../types';
 
@@ -8,7 +9,6 @@ interface Props {
 }
 
 function getMimeType(dataUrl: string): string {
-  // data:<mime>;base64,...
   return dataUrl.split(';')[0].split(':')[1] ?? '';
 }
 
@@ -17,6 +17,30 @@ export function NoteViewerModal({ note, onClose }: Props) {
   const isPdf = mime === 'application/pdf';
   const isImage = mime.startsWith('image/');
   const canPreview = isPdf || isImage;
+
+  const contentRef = useRef<HTMLDivElement>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const handler = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', handler);
+    return () => document.removeEventListener('fullscreenchange', handler);
+  }, []);
+
+  const toggleFullscreen = async () => {
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+      } else {
+        // For PDFs fullscreen the iframe directly so the browser's PDF viewer fills the screen
+        const target = (isPdf ? iframeRef.current : contentRef.current) ?? contentRef.current;
+        await target?.requestFullscreen();
+      }
+    } catch {
+      // Fullscreen not supported or denied — silently ignore
+    }
+  };
 
   return (
     <motion.div
@@ -43,6 +67,7 @@ export function NoteViewerModal({ note, onClose }: Props) {
             <p className="font-semibold text-sm text-primary truncate">{note.title}</p>
             <p className="text-[11px] text-text-muted">{mime || 'Local file'}</p>
           </div>
+
           <a
             href={note.driveUrl}
             download={note.title}
@@ -50,6 +75,17 @@ export function NoteViewerModal({ note, onClose }: Props) {
           >
             <Download className="w-3.5 h-3.5" /> Download
           </a>
+
+          {canPreview && (
+            <button
+              onClick={toggleFullscreen}
+              title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+              className="w-8 h-8 flex items-center justify-center rounded-xl bg-canvas border border-border-strong text-text-muted hover:text-primary transition-colors shrink-0"
+            >
+              {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+            </button>
+          )}
+
           <button
             onClick={onClose}
             className="w-8 h-8 flex items-center justify-center rounded-xl bg-canvas border border-border-strong text-text-muted hover:text-primary transition-colors shrink-0"
@@ -59,9 +95,10 @@ export function NoteViewerModal({ note, onClose }: Props) {
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-auto min-h-0 bg-canvas">
+        <div ref={contentRef} className="flex-1 overflow-auto min-h-0 bg-canvas">
           {isPdf && (
             <iframe
+              ref={iframeRef}
               src={note.driveUrl}
               className="w-full h-full border-none"
               style={{ minHeight: '70vh' }}

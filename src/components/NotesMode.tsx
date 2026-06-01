@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
 import { AnimatePresence } from 'motion/react';
+import { convertPptxToPdf } from '../lib/pptxToPdf';
 import { StickyNote, ExternalLink, FolderOpen, Plus, X, Loader2, AlertCircle, Upload, Download, FileText, Eye } from 'lucide-react';
 import { NotePlan } from '../types';
 import { NoteViewerModal } from './NoteViewerModal';
@@ -113,22 +114,29 @@ export function NotesMode({ notes, onAddNote, onRemoveNote }: Props) {
     if (file) acceptFile(file);
   };
 
+  const isPptx = localFile?.name.toLowerCase().endsWith('.pptx') ?? false;
+
   const handleLocalAdd = async () => {
     if (!localFile || !localTitle.trim()) return;
     setUploading(true);
     try {
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = () => reject(new Error('Failed to read file'));
-        reader.readAsDataURL(localFile);
-      });
+      let dataUrl: string;
+      if (isPptx) {
+        dataUrl = await convertPptxToPdf(localFile);
+      } else {
+        dataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = () => reject(new Error('Failed to read file'));
+          reader.readAsDataURL(localFile);
+        });
+      }
       onAddNote({ id: genId(), title: localTitle.trim(), driveUrl: dataUrl, localFile: true });
       setLocalFile(null);
       setLocalTitle('');
       setLocalError(null);
     } catch {
-      setLocalError('Failed to read the file. Please try again.');
+      setLocalError(isPptx ? 'Failed to convert PPTX to PDF. Please try again.' : 'Failed to read the file. Please try again.');
     } finally {
       setUploading(false);
     }
@@ -265,7 +273,7 @@ export function NotesMode({ notes, onAddNote, onRemoveNote }: Props) {
                 disabled={!localFile || !localTitle.trim() || uploading}
                 className="w-full flex items-center justify-center gap-2 py-2.5 bg-primary text-white text-sm font-semibold rounded-xl hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-sm shadow-primary/20"
               >
-                {uploading ? <><Loader2 className="w-4 h-4 animate-spin" /> Reading file…</> : <><Plus className="w-4 h-4" /> Add note</>}
+                {uploading ? <><Loader2 className="w-4 h-4 animate-spin" /> {isPptx ? 'Converting PPTX to PDF…' : 'Reading file…'}</> : <><Plus className="w-4 h-4" /> Add note</>}
               </button>
             </div>
           </>
