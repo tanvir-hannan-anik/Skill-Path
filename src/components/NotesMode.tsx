@@ -1,6 +1,8 @@
 import { useState, useRef } from 'react';
-import { StickyNote, ExternalLink, FolderOpen, Plus, X, Loader2, AlertCircle, Upload, Download, FileText } from 'lucide-react';
+import { AnimatePresence } from 'motion/react';
+import { StickyNote, ExternalLink, FolderOpen, Plus, X, Loader2, AlertCircle, Upload, Download, FileText, Eye } from 'lucide-react';
 import { NotePlan } from '../types';
+import { NoteViewerModal } from './NoteViewerModal';
 
 interface Props {
   notes: NotePlan[];
@@ -63,6 +65,7 @@ export function NotesMode({ notes, onAddNote, onRemoveNote }: Props) {
   const [uploading, setUploading] = useState(false);
   const [dragging, setDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [viewingNote, setViewingNote] = useState<NotePlan | null>(null);
 
   const handleUrlBlur = async () => {
     if (!url.trim() || title.trim()) return;
@@ -133,6 +136,9 @@ export function NotesMode({ notes, onAddNote, onRemoveNote }: Props) {
 
   return (
     <div className="space-y-6">
+      <AnimatePresence>
+        {viewingNote && <NoteViewerModal note={viewingNote} onClose={() => setViewingNote(null)} />}
+      </AnimatePresence>
       {/* Add note panel */}
       <div className="bg-canvas border border-border-strong rounded-[20px] p-5 space-y-4">
 
@@ -281,14 +287,25 @@ export function NotesMode({ notes, onAddNote, onRemoveNote }: Props) {
               <div className="flex-1 min-w-0">
                 <p className="font-semibold text-primary text-sm mb-1">{note.title}</p>
                 {note.localFile ? (
-                  <a
-                    href={note.driveUrl}
-                    download={note.title}
-                    className="inline-flex items-center gap-1 text-xs text-violet-600 hover:text-violet-800 hover:underline transition-colors"
-                  >
-                    <Download className="w-3 h-3" />
-                    Download file
-                  </a>
+                  <div className="flex items-center gap-2 mt-1">
+                    <button
+                      onClick={() => setViewingNote(note)}
+                      className="inline-flex items-center gap-1 text-xs text-violet-600 hover:text-violet-800 hover:underline transition-colors font-medium"
+                    >
+                      <Eye className="w-3 h-3" />
+                      View
+                    </button>
+                    <span className="text-text-muted text-xs">·</span>
+                    <a
+                      href={note.driveUrl}
+                      download={note.title}
+                      className="inline-flex items-center gap-1 text-xs text-text-muted hover:text-primary hover:underline transition-colors"
+                    >
+                      <Download className="w-3 h-3" />
+                      Download
+                    </a>
+                    <span className="text-[10px] text-text-muted ml-1">Local file</span>
+                  </div>
                 ) : (
                   <a
                     href={note.driveUrl}
@@ -300,9 +317,6 @@ export function NotesMode({ notes, onAddNote, onRemoveNote }: Props) {
                     Open in Google Drive
                     <ExternalLink className="w-3 h-3" />
                   </a>
-                )}
-                {note.localFile && (
-                  <p className="text-[10px] text-text-muted mt-0.5">Local file</p>
                 )}
               </div>
               <button

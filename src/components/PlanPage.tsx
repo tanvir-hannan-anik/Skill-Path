@@ -2,10 +2,11 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Plus, Play, FileText, HelpCircle, ClipboardList, StickyNote,
   ChevronLeft, ChevronRight, X, Clock, ExternalLink, Trash2,
-  AlertCircle, FolderOpen, Search, Loader2, Upload, Download,
+  AlertCircle, FolderOpen, Search, Loader2, Upload, Download, Eye,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Schedule, DayContent, Resource, QuizPlan, AssignmentPlan, NotePlan, YouTubeResult } from '../types';
+import { NoteViewerModal } from './NoteViewerModal';
 import { toDateKey } from '../lib/dates';
 import { searchYouTube, isYouTubeConfigured, videoIdToUrl, formatDuration } from '../lib/youtube';
 import { SEARCH_PROVIDERS } from '../lib/search';
@@ -774,20 +775,27 @@ function AssignmentChip({ item, onRemove }: { item: AssignmentPlan; onRemove: ()
 }
 
 function NoteChip({ item, onRemove }: { item: NotePlan; onRemove: () => void }) {
+  const [viewing, setViewing] = useState(false);
   return (
-    <div className="flex items-center gap-2 bg-violet-50 border border-violet-200 rounded-xl px-3 py-2 group">
-      <div className="w-6 h-6 rounded-lg bg-violet-100 flex items-center justify-center shrink-0"><StickyNote className="w-3 h-3 text-violet-600" /></div>
-      <div className="flex-1 min-w-0">
-        <p className="text-xs font-semibold text-violet-800 truncate">{item.title}</p>
-        {item.localFile && <p className="text-[10px] text-violet-500">Local file</p>}
+    <>
+      {viewing && <NoteViewerModal note={item} onClose={() => setViewing(false)} />}
+      <div className="flex items-center gap-2 bg-violet-50 border border-violet-200 rounded-xl px-3 py-2 group">
+        <div className="w-6 h-6 rounded-lg bg-violet-100 flex items-center justify-center shrink-0"><StickyNote className="w-3 h-3 text-violet-600" /></div>
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-semibold text-violet-800 truncate">{item.title}</p>
+          {item.localFile && <p className="text-[10px] text-violet-500">Local file</p>}
+        </div>
+        {item.localFile ? (
+          <>
+            <button onClick={() => setViewing(true)} className="text-violet-400 hover:text-violet-600 shrink-0" title="View"><Eye className="w-3 h-3" /></button>
+            <a href={item.driveUrl} download={item.title} className="text-violet-400 hover:text-violet-600 shrink-0" title="Download"><Download className="w-3 h-3" /></a>
+          </>
+        ) : (
+          <a href={item.driveUrl} target="_blank" rel="noopener noreferrer" className="text-violet-400 hover:text-violet-600 shrink-0"><ExternalLink className="w-3 h-3" /></a>
+        )}
+        <button onClick={onRemove} className="text-violet-300 hover:text-violet-500 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 className="w-3 h-3" /></button>
       </div>
-      {item.localFile ? (
-        <a href={item.driveUrl} download={item.title} className="text-violet-400 hover:text-violet-600 shrink-0"><Download className="w-3 h-3" /></a>
-      ) : (
-        <a href={item.driveUrl} target="_blank" rel="noopener noreferrer" className="text-violet-400 hover:text-violet-600 shrink-0"><ExternalLink className="w-3 h-3" /></a>
-      )}
-      <button onClick={onRemove} className="text-violet-300 hover:text-violet-500 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 className="w-3 h-3" /></button>
-    </div>
+    </>
   );
 }
 
