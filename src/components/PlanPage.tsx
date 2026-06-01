@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Schedule, DayContent, Resource, QuizPlan, AssignmentPlan, NotePlan, YouTubeResult } from '../types';
 import { NoteViewerModal } from './NoteViewerModal';
 import { convertPptxToPdf } from '../lib/pptxToPdf';
+import { storeFile, loadFile, deleteFile } from '../lib/fileStore';
 import { toDateKey } from '../lib/dates';
 import { searchYouTube, isYouTubeConfigured, videoIdToUrl, formatDuration } from '../lib/youtube';
 import { SEARCH_PROVIDERS } from '../lib/search';
@@ -431,7 +432,10 @@ function NoteForm({ onSubmit }: NoteFormProps) {
           reader.readAsDataURL(localFile);
         });
       }
-      onSubmit({ id: genId(), title: localTitle.trim(), driveUrl: dataUrl, localFile: true });
+      // Store the blob in IndexedDB — only the ID travels in the schedule
+      const fileId = genId();
+      await storeFile(fileId, dataUrl);
+      onSubmit({ id: genId(), title: localTitle.trim(), driveUrl: '', localFile: true, localFileId: fileId });
     } catch {
       setLocalError(isPptx ? 'Failed to convert PPTX to PDF. Please try again.' : 'Failed to read the file. Please try again.');
     } finally {
@@ -784,6 +788,21 @@ function AssignmentChip({ item, onRemove }: { item: AssignmentPlan; onRemove: ()
 
 function NoteChip({ item, onRemove }: { item: NotePlan; onRemove: () => void }) {
   const [viewing, setViewing] = useState(false);
+
+  const handleDownload = async () => {
+    const url = item.localFileId ? await loadFile(item.localFileId) : item.driveUrl;
+    if (!url) return;
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = item.title;
+    a.click();
+  };
+
+  const handleRemove = () => {
+    if (item.localFileId) deleteFile(item.localFileId).catch(() => {});
+    onRemove();
+  };
+
   return (
     <>
       {viewing && <NoteViewerModal note={item} onClose={() => setViewing(false)} />}
@@ -796,12 +815,12 @@ function NoteChip({ item, onRemove }: { item: NotePlan; onRemove: () => void }) 
         {item.localFile ? (
           <>
             <button onClick={() => setViewing(true)} className="text-violet-400 hover:text-violet-600 shrink-0" title="View"><Eye className="w-3 h-3" /></button>
-            <a href={item.driveUrl} download={item.title} className="text-violet-400 hover:text-violet-600 shrink-0" title="Download"><Download className="w-3 h-3" /></a>
+            <button onClick={handleDownload} className="text-violet-400 hover:text-violet-600 shrink-0" title="Download"><Download className="w-3 h-3" /></button>
           </>
         ) : (
           <a href={item.driveUrl} target="_blank" rel="noopener noreferrer" className="text-violet-400 hover:text-violet-600 shrink-0"><ExternalLink className="w-3 h-3" /></a>
         )}
-        <button onClick={onRemove} className="text-violet-300 hover:text-violet-500 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 className="w-3 h-3" /></button>
+        <button onClick={handleRemove} className="text-violet-300 hover:text-violet-500 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 className="w-3 h-3" /></button>
       </div>
     </>
   );

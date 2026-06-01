@@ -42,8 +42,9 @@ export interface AssignmentPlan {
 export interface NotePlan {
   id: string;
   title: string;
-  driveUrl: string;
+  driveUrl: string;       // Google Drive URL — empty string for local files
   localFile?: boolean;
+  localFileId?: string;   // IndexedDB key when localFile is true
 }
 
 export interface Task {

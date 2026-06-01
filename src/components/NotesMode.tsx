@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import { AnimatePresence } from 'motion/react';
 import { convertPptxToPdf } from '../lib/pptxToPdf';
+import { storeFile, loadFile, deleteFile } from '../lib/fileStore';
 import { StickyNote, ExternalLink, FolderOpen, Plus, X, Loader2, AlertCircle, Upload, Download, FileText, Eye } from 'lucide-react';
 import { NotePlan } from '../types';
 import { NoteViewerModal } from './NoteViewerModal';
@@ -131,7 +132,10 @@ export function NotesMode({ notes, onAddNote, onRemoveNote }: Props) {
           reader.readAsDataURL(localFile);
         });
       }
-      onAddNote({ id: genId(), title: localTitle.trim(), driveUrl: dataUrl, localFile: true });
+      // Store blob in IndexedDB — only the small ID goes into the schedule
+      const fileId = genId();
+      await storeFile(fileId, dataUrl);
+      onAddNote({ id: genId(), title: localTitle.trim(), driveUrl: '', localFile: true, localFileId: fileId });
       setLocalFile(null);
       setLocalTitle('');
       setLocalError(null);
@@ -140,6 +144,20 @@ export function NotesMode({ notes, onAddNote, onRemoveNote }: Props) {
     } finally {
       setUploading(false);
     }
+  };
+
+  const handleRemoveNote = (note: NotePlan) => {
+    if (note.localFileId) deleteFile(note.localFileId).catch(() => {});
+    onRemoveNote(note.id);
+  };
+
+  const handleDownload = async (note: NotePlan) => {
+    const url = note.localFileId ? await loadFile(note.localFileId) : note.driveUrl;
+    if (!url) return;
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = note.title;
+    a.click();
   };
 
   return (
@@ -304,14 +322,13 @@ export function NotesMode({ notes, onAddNote, onRemoveNote }: Props) {
                       View
                     </button>
                     <span className="text-text-muted text-xs">·</span>
-                    <a
-                      href={note.driveUrl}
-                      download={note.title}
+                    <button
+                      onClick={() => handleDownload(note)}
                       className="inline-flex items-center gap-1 text-xs text-text-muted hover:text-primary hover:underline transition-colors"
                     >
                       <Download className="w-3 h-3" />
                       Download
-                    </a>
+                    </button>
                     <span className="text-[10px] text-text-muted ml-1">Local file</span>
                   </div>
                 ) : (
@@ -328,7 +345,7 @@ export function NotesMode({ notes, onAddNote, onRemoveNote }: Props) {
                 )}
               </div>
               <button
-                onClick={() => onRemoveNote(note.id)}
+                onClick={() => handleRemoveNote(note)}
                 aria-label="Remove note"
                 className="w-8 h-8 flex items-center justify-center rounded-full text-text-muted hover:text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-all shrink-0"
               >
