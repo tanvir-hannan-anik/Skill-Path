@@ -193,7 +193,7 @@ export function VideoPortionScheduler({
             <span className="font-medium">{formatDuration(totalWatched)} of {formatDuration(totalPlanned)}</span>
             <span className="font-bold">{overallPct}%</span>
           </div>
-          <div className="h-2 bg-white border border-border-strong rounded-full overflow-hidden">
+          <div className="h-2 bg-surface border border-border-strong rounded-full overflow-hidden">
             <motion.div
               className="h-full bg-accent rounded-full"
               initial={{ width: 0 }}
@@ -206,7 +206,7 @@ export function VideoPortionScheduler({
 
       {/* Quick split */}
       {totalSec > 0 && sessions.length === 0 && (
-        <div className="mb-5 p-3 bg-white border border-border-strong rounded-xl">
+        <div className="mb-5 p-3 bg-surface border border-border-strong rounded-xl">
           <div className="text-xs font-bold uppercase tracking-widest text-text-muted mb-2.5">Quick split</div>
           <div className="flex flex-wrap gap-2 items-center">
             {Array.from({ length: quickSplitMax }, (_, i) => i + 1).map((n) => (
@@ -246,7 +246,7 @@ export function VideoPortionScheduler({
                 initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, x: -10 }}
-                className={`bg-white border rounded-xl p-3 flex items-center gap-3 ${s.completed ? 'border-emerald-200 bg-emerald-50/40' : 'border-border-strong'}`}
+                className={`border rounded-xl p-3 flex items-center gap-3 ${s.completed ? 'border-emerald-200 bg-emerald-50/40' : 'bg-surface border-border-strong'}`}
               >
                 <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
                   s.completed ? 'bg-emerald-500 text-white' : 'bg-canvas text-text-secondary'
@@ -300,7 +300,7 @@ export function VideoPortionScheduler({
             type="date"
             value={newDate}
             onChange={(e) => setNewDate(e.target.value)}
-            className="w-full bg-white border border-border-strong rounded-xl px-3 py-2 text-sm outline-none focus:border-primary text-primary"
+            className="w-full bg-surface border border-border-strong rounded-xl px-3 py-2 text-sm outline-none focus:border-primary text-primary"
           />
         </label>
         <label>
@@ -310,7 +310,7 @@ export function VideoPortionScheduler({
             value={newStart}
             onChange={(e) => setNewStart(e.target.value)}
             placeholder="0:00"
-            className="w-full bg-white border border-border-strong rounded-xl px-3 py-2 text-sm outline-none focus:border-primary text-primary tabular-nums"
+            className="w-full bg-surface border border-border-strong rounded-xl px-3 py-2 text-sm outline-none focus:border-primary text-primary tabular-nums"
           />
         </label>
         <label>
@@ -320,7 +320,7 @@ export function VideoPortionScheduler({
             value={newEnd}
             onChange={(e) => setNewEnd(e.target.value)}
             placeholder={totalSec ? formatDuration(totalSec) : '30:00'}
-            className="w-full bg-white border border-border-strong rounded-xl px-3 py-2 text-sm outline-none focus:border-primary text-primary tabular-nums"
+            className="w-full bg-surface border border-border-strong rounded-xl px-3 py-2 text-sm outline-none focus:border-primary text-primary tabular-nums"
           />
         </label>
         <button

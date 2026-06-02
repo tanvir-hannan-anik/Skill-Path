@@ -86,7 +86,7 @@ export function VideoMode({ videos, onAddVideo, onRemoveVideo, onScheduleVideoFo
       {/* Player */}
       <div ref={containerRef} className={`relative group ${isFullscreen ? 'fixed inset-0 z-50 bg-black p-0 m-0' : ''}`}>
         {!isFullscreen && (
-          <div className="absolute -inset-4 bg-gradient-to-r from-blue-100 to-purple-100 opacity-50 blur-2xl rounded-[40px] -z-10 group-hover:opacity-70 transition-opacity duration-700 dark:opacity-10" />
+          <div className="absolute -inset-4 bg-gradient-to-r from-blue-100 to-violet-100 opacity-50 blur-2xl rounded-[40px] -z-10 group-hover:opacity-70 transition-opacity duration-700 dark:from-blue-900/30 dark:to-violet-900/30 dark:opacity-20" />
         )}
 
         <div className={`bg-white border border-border-strong rounded-[24px] sm:rounded-[32px] overflow-hidden shadow-[0_8px_40px_rgb(0,0,0,0.06)] ${isFullscreen ? '!rounded-none !border-none h-full flex flex-col' : 'p-2'}`}>

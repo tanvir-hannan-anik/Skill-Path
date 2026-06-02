@@ -16,6 +16,8 @@ interface YTPlayer {
   getDuration(): number;
   getPlayerState(): number;
   seekTo(sec: number, allowSeekAhead: boolean): void;
+  setPlaybackRate(rate: number): void;
+  getPlaybackRate(): number;
   destroy(): void;
 }
 
@@ -93,17 +95,33 @@ export function useYouTubePlayer(videoId: string | null) {
           onStateChange: (event: { data: number }) => {
             if (!playerRef.current) return;
             setDurationSec(playerRef.current.getDuration() ?? 0);
-            const isPlaying = event.data === 1; // 1 = YT.PlayerState.PLAYING
-            // Poll while playing.
-            if (isPlaying && !pollRef.current) {
-              pollRef.current = setInterval(() => {
-                const t = playerRef.current?.getCurrentTime() ?? 0;
-                setCurrentSec(Math.floor(t));
-              }, 1000);
-            } else if (!isPlaying && pollRef.current) {
-              clearInterval(pollRef.current);
-              pollRef.current = null;
+            const state = event.data;
+            const isPlaying = state === 1;   // YT.PlayerState.PLAYING
+            const isBuffering = state === 3; // YT.PlayerState.BUFFERING
+            if (isPlaying) {
+              // Start poll if not already running.
+              if (!pollRef.current) {
+                pollRef.current = setInterval(() => {
+                  const t = playerRef.current?.getCurrentTime() ?? 0;
+                  setCurrentSec(Math.floor(t));
+                }, 1000);
+              }
+            } else if (!isBuffering) {
+              // PAUSED / ENDED / UNSTARTED / VIDEO_CUED — stop poll and snap position.
+              // We intentionally leave the poll running through BUFFERING so that
+              // mid-playback rebuffers (including speed changes) don't interrupt tracking.
+              if (pollRef.current) {
+                clearInterval(pollRef.current);
+                pollRef.current = null;
+              }
               setCurrentSec(Math.floor(playerRef.current?.getCurrentTime() ?? 0));
+            }
+          },
+          onPlaybackRateChange: () => {
+            // When the user changes speed (e.g. 2×) the player may emit a brief
+            // BUFFERING state; update currentSec so progress stays accurate.
+            if (playerRef.current) {
+              setCurrentSec(Math.floor(playerRef.current.getCurrentTime()));
             }
           },
         },
@@ -127,5 +145,9 @@ export function useYouTubePlayer(videoId: string | null) {
     playerRef.current?.seekTo(sec, true);
   }, []);
 
-  return { containerRef: setContainer, currentSec, durationSec, ready, seekTo };
+  const setPlaybackRate = useCallback((rate: number) => {
+    playerRef.current?.setPlaybackRate(rate);
+  }, []);
+
+  return { containerRef: setContainer, currentSec, durationSec, ready, seekTo, setPlaybackRate };
 }
