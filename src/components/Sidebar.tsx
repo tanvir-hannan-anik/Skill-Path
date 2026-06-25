@@ -1,4 +1,4 @@
-import { Home, Compass, CheckSquare, Calendar as CalendarIcon, Lightbulb, LogIn, Map, Flame, MessageCircle, BookOpen } from 'lucide-react';
+import { Home, Compass, CheckSquare, Calendar as CalendarIcon, Lightbulb, LogIn, Map, Flame, MessageCircle, BookOpen, Code2 } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
 import { WorkspaceSwitcher } from './WorkspaceSwitcher';
 import { ReactNode, useMemo } from 'react';
@@ -28,6 +28,7 @@ const NAV_ITEMS: { id: NavItem; label: string; icon: ReactNode }[] = [
   { id: 'tasks', label: 'Tasks', icon: <CheckSquare className="w-[18px] h-[18px]" /> },
   { id: 'calendar', label: 'Calendar', icon: <CalendarIcon className="w-[18px] h-[18px]" /> },
   { id: 'insights', label: 'Insights', icon: <Lightbulb className="w-[18px] h-[18px]" /> },
+  { id: 'code-tutor', label: 'Code Tutor', icon: <Code2 className="w-[18px] h-[18px]" /> },
 ];
 
 const SOFT_SKILLS_ITEMS: { id: NavItem; label: string; icon: ReactNode }[] = [

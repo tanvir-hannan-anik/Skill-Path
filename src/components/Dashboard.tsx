@@ -19,6 +19,7 @@ const CalendarView = lazy(() => import('./CalendarView').then(m => ({ default: m
 const PlanPage = lazy(() => import('./PlanPage').then(m => ({ default: m.PlanPage })));
 const CommunicationPage = lazy(() => import('./CommunicationPage').then(m => ({ default: m.CommunicationPage })));
 const VocabularyPage = lazy(() => import('./VocabularyPage').then(m => ({ default: m.VocabularyPage })));
+const CodeTutorPage = lazy(() => import('./CodeTutorPage').then(m => ({ default: m.CodeTutorPage })));
 
 interface Props {
   onRequestAuth: () => void;
@@ -234,6 +235,12 @@ export function Dashboard({ onRequestAuth }: Props) {
               {activeTab === 'insights' && (
                 <Suspense fallback={<FullPageLoader label="Loading insights…" />}>
                   <InsightsPage skill={activeWorkspace?.name ?? ''} schedule={schedule} />
+                </Suspense>
+              )}
+
+              {activeTab === 'code-tutor' && (
+                <Suspense fallback={<FullPageLoader label="Loading Code Tutor…" />}>
+                  <CodeTutorPage skill={activeWorkspace?.name ?? ''} />
                 </Suspense>
               )}
 

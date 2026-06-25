@@ -218,6 +218,193 @@ export async function generateStudyPackViaGroq(docUrl: string, docTitle: string)
   };
 }
 
+// ---- Code Tutor: execution trace generation --------------------------------
+
+export interface TraceFrame {
+  /** "global" or the function name. */
+  name: string;
+  /** Variable name → string-rendered value. References point at heap keys. */
+  locals: Record<string, string>;
+  /** Set on the active frame once it has returned. */
+  returnValue?: string | null;
+}
+
+export interface HeapObject {
+  /** "list" | "tuple" | "dict" | "object" | "set" | ... */
+  type: string;
+  /** For list/tuple/set: the element values, in order. */
+  items?: string[];
+  /** For dict/object: key/field → value. */
+  entries?: Record<string, string>;
+  /** For object instances: the class name. */
+  className?: string;
+}
+
+export interface TraceStep {
+  step: number;
+  /** 1-based source line being executed at this step. */
+  line: number;
+  event: string; // 'call' | 'step' | 'return'
+  frames: TraceFrame[];
+  heap?: Record<string, HeapObject>;
+  /** Accumulated program output up to and including this step. */
+  stdout: string;
+  returnValue?: string | null;
+}
+
+function tracerPrompt(code: string, langName: string): string {
+  return [
+    `You are a ${langName} execution tracer. Simulate running the code below step by step,`,
+    'exactly like Python Tutor. Return ONLY a JSON object of this shape:',
+    '{ "steps": [ { "step": 1, "line": 3, "event": "call"|"step"|"return",',
+    '  "frames": [ { "name": "global"|"funcName", "locals": { "x": "5" }, "returnValue": null } ],',
+    '  "heap": { "ref_1": { "type": "list", "items": ["1","2","3"] },',
+    '            "ref_2": { "type": "dict", "entries": { "a": "1" } },',
+    '            "ref_3": { "type": "object", "className": "Node", "entries": { "val": "1", "next": "ref_4" } } },',
+    '  "stdout": "accumulated output so far", "returnValue": null } ] }',
+    'Rules:',
+    '- Number steps from 1. Include every executed line, every call, and every return.',
+    '- Frames are ordered bottom (global) to top (most recent call). For recursion, stack multiple frames.',
+    '- All values in "locals", "items", and "entries" must be strings.',
+    '- When a variable holds a list/dict/tuple/set/object, store the object in "heap" and set the variable value to its ref key (e.g. "ref_1").',
+    '- Only include "heap" entries that actually exist at that step.',
+    '- "stdout" is the FULL output printed so far (append each print / console.log / printf / cout / System.out.print[ln]), not just the latest line.',
+    '- Maximum 40 steps. If the program is longer, stop early at a sensible point.',
+    'Do not include any prose, comments, or markdown — JSON object only.',
+    '',
+    `${langName} CODE TO TRACE:`,
+    code,
+  ].join('\n');
+}
+
+/** Generates a step-by-step execution trace for the given code via Groq. */
+const LANG_NAMES: Record<string, string> = {
+  python: 'Python',
+  javascript: 'JavaScript',
+  c: 'C',
+  cpp: 'C++',
+  java: 'Java',
+};
+
+export async function traceCode(code: string, language: string): Promise<TraceStep[]> {
+  if (!apiKey) throw new Error('AI not configured. Add VITE_GROQ_API_KEY to .env.local.');
+  const langName = LANG_NAMES[language] ?? 'Python';
+
+  const res = await fetch(GROQ_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({
+      model: GROQ_MODEL,
+      messages: [
+        { role: 'system', content: `You are a precise ${langName} execution tracer. Output only JSON.` },
+        { role: 'user', content: tracerPrompt(code, langName) },
+      ],
+      response_format: { type: 'json_object' },
+      temperature: 0.1,
+      max_tokens: 6000,
+    }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { error?: { message?: string } };
+    throw new Error(err?.error?.message ?? `Groq API error ${res.status}`);
+  }
+  const data = await res.json() as { choices?: { message?: { content?: string } }[] };
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) throw new Error('AI returned an empty response.');
+
+  let parsed: unknown;
+  try { parsed = JSON.parse(content); } catch { throw new Error('Could not parse trace. Try simpler code.'); }
+  const steps = Array.isArray(parsed)
+    ? (parsed as TraceStep[])
+    : ((parsed as { steps?: TraceStep[] }).steps ?? []);
+  if (!steps.length) throw new Error('Could not parse trace. Try simpler code.');
+  return steps.slice(0, 40);
+}
+
+/** Runs code on the public Piston API to capture real stdout. Returns null on failure. */
+export async function runViaPiston(code: string, language: string): Promise<string | null> {
+  const map: Record<string, { language: string; version: string }> = {
+    python: { language: 'python', version: '3.10.0' },
+    javascript: { language: 'javascript', version: '18.15.0' },
+    c: { language: 'c', version: '10.2.0' },
+    cpp: { language: 'c++', version: '10.2.0' },
+    java: { language: 'java', version: '15.0.2' },
+  };
+  const cfg = map[language] ?? map.python;
+  try {
+    const res = await fetch('https://emkc.org/api/v2/piston/execute', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        language: cfg.language,
+        version: cfg.version,
+        files: [{ content: code }],
+      }),
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!res.ok) return null;
+    const data = await res.json() as { run?: { stdout?: string; stderr?: string; output?: string } };
+    const run = data.run;
+    if (!run) return null;
+    return (run.output ?? `${run.stdout ?? ''}${run.stderr ?? ''}`).trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Streams a Groq reply with a caller-supplied system prompt (used by the Code Tutor chat).
+ */
+export async function streamGroqChat(opts: {
+  system: string;
+  history: ChatMessage[];
+  userMessage: string;
+  onDelta: (chunk: string) => void;
+  signal?: AbortSignal;
+}): Promise<string> {
+  if (!apiKey) throw new Error('AI assistant is not configured. Add VITE_GROQ_API_KEY to your .env.local.');
+
+  const messages = [
+    { role: 'system', content: opts.system },
+    ...opts.history.map((m) => ({ role: m.role === 'ai' ? 'assistant' : 'user', content: m.text })),
+    { role: 'user', content: opts.userMessage },
+  ];
+
+  const res = await fetch(GROQ_URL, {
+    method: 'POST',
+    signal: opts.signal,
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({ model: GROQ_MODEL, messages, stream: true, temperature: 0.6, max_tokens: 1024 }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { error?: { message?: string } };
+    throw new Error(err?.error?.message ?? `Groq API error ${res.status}`);
+  }
+
+  const reader = res.body!.getReader();
+  const decoder = new TextDecoder();
+  let full = '';
+  let buffer = '';
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (opts.signal?.aborted) { reader.cancel(); break; }
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() ?? '';
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed === 'data: [DONE]' || !trimmed.startsWith('data: ')) continue;
+      try {
+        const json = JSON.parse(trimmed.slice(6)) as { choices?: { delta?: { content?: string } }[] };
+        const text = json.choices?.[0]?.delta?.content ?? '';
+        if (text) { full += text; opts.onDelta(text); }
+      } catch { /* skip malformed SSE chunk */ }
+    }
+  }
+  return full;
+}
+
 /**
  * Streams a Groq LLM reply using the OpenAI-compatible SSE endpoint.
  * `onDelta` fires for each text chunk as it arrives.
